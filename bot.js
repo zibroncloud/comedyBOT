@@ -6,7 +6,7 @@ const path = require('path');
 const TOKEN = process.env.BOT_TOKEN;
 const ADMIN_ID = '827798574'; // Chat ID di @dinobronzi82
 const BACKUP_FILE = path.join(__dirname, 'comedy_backup.json');
-const VERSION = '22.5';
+const VERSION = '22.6';
 
 if (!TOKEN) {
     console.error('❌ ERRORE: BOT_TOKEN non trovato!');
@@ -18,6 +18,7 @@ const bot = new TelegramBot(TOKEN, {polling: true});
 // Database
 let eventi = [];
 let userStats = {};
+let bannedUsers = []; // Lista utenti bannati
 const userStates = {};
 
 // Categorie eventi
@@ -30,7 +31,13 @@ const categorieEventi = {
 // 🗄️ SISTEMA BACKUP
 function salvaBackup() {
     try {
-        const backup = { eventi, userStats, timestamp: new Date().toISOString(), version: VERSION };
+        const backup = { 
+            eventi, 
+            userStats, 
+            bannedUsers, 
+            timestamp: new Date().toISOString(), 
+            version: VERSION 
+        };
         fs.writeFileSync(BACKUP_FILE, JSON.stringify(backup, null, 2));
         console.log('✅ Backup salvato:', new Date().toLocaleString());
         return true;
@@ -46,7 +53,8 @@ function caricaBackup() {
             const backup = JSON.parse(fs.readFileSync(BACKUP_FILE, 'utf8'));
             eventi = backup.eventi || [];
             userStats = backup.userStats || {};
-            console.log(`✅ Backup caricato: ${eventi.length} eventi, ${Object.keys(userStats).length} utenti`);
+            bannedUsers = backup.bannedUsers || [];
+            console.log(`✅ Backup caricato: ${eventi.length} eventi, ${Object.keys(userStats).length} utenti, ${bannedUsers.length} ban`);
             return true;
         }
         console.log('📝 Nessun backup trovato');
@@ -55,29 +63,76 @@ function caricaBackup() {
         console.error('❌ Errore caricamento:', error);
         eventi = [];
         userStats = {};
+        bannedUsers = [];
         return false;
     }
 }
 
 // Utility functions
 const isAdmin = (chatId) => chatId.toString() === ADMIN_ID;
+const isBanned = (chatId) => bannedUsers.includes(chatId.toString());
 const resetUserState = (chatId) => delete userStates[chatId];
 const setUserState = (chatId, state, data = {}) => {
     userStates[chatId] = { state, data, lastActivity: new Date() };
 };
 
-function trackUserActivity(chatId, action) {
+// 🚫 Controllo Ban
+function checkBan(chatId) {
+    if (isBanned(chatId)) {
+        bot.sendMessage(chatId, '🚫 Sei stato escluso dall\'utilizzo del bot.\n\nPer informazioni: zibroncloud@gmail.com');
+        return true;
+    }
+    return false;
+}
+
+// ⚠️ Controllo Limite Eventi Giornaliero
+function checkDailyLimit(chatId) {
+    const oggi = new Date().toDateString();
+    
     if (!userStats[chatId]) {
         userStats[chatId] = {
             eventiCreati: 0,
+            eventiOggi: 0,
+            ultimaData: oggi,
             ultimoEvento: null,
             primoUso: new Date().toISOString(),
             ultimoUso: new Date().toISOString()
         };
     }
+    
+    // Reset contatore se è un nuovo giorno
+    if (userStats[chatId].ultimaData !== oggi) {
+        userStats[chatId].eventiOggi = 0;
+        userStats[chatId].ultimaData = oggi;
+    }
+    
+    if (userStats[chatId].eventiOggi >= 5) {
+        bot.sendMessage(chatId, '⚠️ Limite giornaliero raggiunto!\n\n🚫 Puoi creare massimo 5 eventi al giorno.\n⏰ Riprova domani.\n\n📧 Per necessità particolari: zibroncloud@gmail.com');
+        return false;
+    }
+    
+    return true;
+}
+
+function trackUserActivity(chatId, action) {
+    const oggi = new Date().toDateString();
+    
+    if (!userStats[chatId]) {
+        userStats[chatId] = {
+            eventiCreati: 0,
+            eventiOggi: 0,
+            ultimaData: oggi,
+            ultimoEvento: null,
+            primoUso: new Date().toISOString(),
+            ultimoUso: new Date().toISOString()
+        };
+    }
+    
     userStats[chatId].ultimoUso = new Date().toISOString();
+    
     if (action === 'crea_evento') {
         userStats[chatId].eventiCreati++;
+        userStats[chatId].eventiOggi++;
         userStats[chatId].ultimoEvento = new Date().toISOString();
     }
 }
@@ -121,7 +176,7 @@ bot.onText(/\/backup/, (msg) => {
     
     const success = salvaBackup();
     bot.sendMessage(chatId, success ? 
-        `✅ Backup salvato!\n📊 ${eventi.length} eventi, ${Object.keys(userStats).length} utenti` : 
+        `✅ Backup salvato!\n📊 ${eventi.length} eventi, ${Object.keys(userStats).length} utenti, ${bannedUsers.length} ban` : 
         '❌ Errore backup!');
 });
 
@@ -140,13 +195,63 @@ bot.onText(/\/stats/, (msg) => {
     bot.sendMessage(chatId, `📊 Stats Bot v.${VERSION}:
 🎭 Eventi: ${eventi.length} (${eventiAttivi.length} attivi)
 👥 Utenti: ${Object.keys(userStats).length}
+🚫 Utenti bannati: ${bannedUsers.length}
 📈 Oggi: ${eventiOggi.length} nuovi eventi
 💾 Backup: ${new Date().toLocaleString()}`);
+});
+
+// 🚫 COMANDI BAN (solo admin)
+bot.onText(/\/ban (.+)/, (msg, match) => {
+    const chatId = msg.chat.id;
+    if (!isAdmin(chatId)) return;
+    
+    const targetId = match[1].trim();
+    
+    if (bannedUsers.includes(targetId)) {
+        bot.sendMessage(chatId, `⚠️ Utente ${targetId} già bannato`);
+        return;
+    }
+    
+    bannedUsers.push(targetId);
+    salvaBackup();
+    bot.sendMessage(chatId, `🚫 Utente ${targetId} bannato con successo!\n\n📋 Totale ban: ${bannedUsers.length}`);
+});
+
+bot.onText(/\/unban (.+)/, (msg, match) => {
+    const chatId = msg.chat.id;
+    if (!isAdmin(chatId)) return;
+    
+    const targetId = match[1].trim();
+    const index = bannedUsers.indexOf(targetId);
+    
+    if (index === -1) {
+        bot.sendMessage(chatId, `⚠️ Utente ${targetId} non è bannato`);
+        return;
+    }
+    
+    bannedUsers.splice(index, 1);
+    salvaBackup();
+    bot.sendMessage(chatId, `✅ Utente ${targetId} sbannato con successo!\n\n📋 Totale ban: ${bannedUsers.length}`);
+});
+
+bot.onText(/\/banlist/, (msg) => {
+    const chatId = msg.chat.id;
+    if (!isAdmin(chatId)) return;
+    
+    if (bannedUsers.length === 0) {
+        bot.sendMessage(chatId, '📋 Nessun utente bannato');
+        return;
+    }
+    
+    const lista = bannedUsers.map((id, i) => `${i + 1}. ${id}`).join('\n');
+    bot.sendMessage(chatId, `🚫 Utenti bannati (${bannedUsers.length}):\n\n${lista}`);
 });
 
 // 📱 COMANDI PUBBLICI
 bot.onText(/\/start/, (msg) => {
     const chatId = msg.chat.id;
+    if (checkBan(chatId)) return;
+    
     resetUserState(chatId);
     trackUserActivity(chatId, 'start');
 
@@ -164,6 +269,7 @@ da @dinobronzi82 - Eventi comedy in Italia!
 /help - Guida completa
 
 🎪 Categorie: 🎤 Serata • 🎪 Festival • 📚 Workshop
+📸 Nuova funzione: Locandine eventi!
 🚀 Sempre online 24/7 con backup automatico!
 
 📧 Per problemi, complimenti e suggerimenti:
@@ -172,6 +278,8 @@ zibroncloud@gmail.com 😉`);
 
 bot.onText(/\/help/, (msg) => {
     const chatId = msg.chat.id;
+    if (checkBan(chatId)) return;
+    
     resetUserState(chatId);
 
     bot.sendMessage(chatId, `🎭 Guida Bot Comedy v.${VERSION}
@@ -186,6 +294,11 @@ bot.onText(/\/help/, (msg) => {
 🎪 Festival - Festival e rassegne
 📚 Corso/Workshop - Corsi e workshop
 
+📸 Novità v.22.6:
+• Locandine eventi (memorizzate su Telegram)
+• Limite 5 eventi/giorno per utente
+• Sistema antispam migliorato
+
 ⚡ Note:
 • Eventi eliminati dopo 1 settimana
 • Roma/Milano divise in 3 zone
@@ -197,12 +310,20 @@ zibroncloud@gmail.com 😉`);
 
 bot.onText(/\/cerca/, (msg) => {
     const chatId = msg.chat.id;
+    if (checkBan(chatId)) return;
+    
     setUserState(chatId, 'cerca');
     bot.sendMessage(chatId, 'Scrivi provincia/città per cercare eventi:\n\nEs: MI, Milano, Roma Nord, TO\n\n/annulla per uscire');
 });
 
 bot.onText(/\/crea/, (msg) => {
     const chatId = msg.chat.id;
+    if (checkBan(chatId)) return;
+    
+    if (!checkDailyLimit(chatId)) {
+        return; // Limite giornaliero raggiunto
+    }
+    
     setUserState(chatId, 'crea_categoria');
     trackUserActivity(chatId, 'inizio_creazione');
 
@@ -219,6 +340,8 @@ bot.onText(/\/crea/, (msg) => {
 
 bot.onText(/\/miei_eventi/, (msg) => {
     const chatId = msg.chat.id;
+    if (checkBan(chatId)) return;
+    
     resetUserState(chatId);
     pulisciEventiScaduti();
 
@@ -236,14 +359,21 @@ bot.onText(/\/miei_eventi/, (msg) => {
     let messaggio = `🎭 I tuoi eventi (${mieiEventi.length}):\n\n`;
     mieiEventi.forEach((evento, i) => {
         const categoria = categorieEventi[evento.categoria];
-        messaggio += `${i + 1}. ${evento.data} - ${evento.ora}\n🎪 ${evento.titolo}\n🏢 ${evento.nomeLocale}\n📍 ${evento.cittaProvincia}\n${categoria.icona} ${categoria.nome}\n\n`;
+        const fotoIcon = evento.locandina ? '📸' : '';
+        messaggio += `${i + 1}. ${evento.data} - ${evento.ora} ${fotoIcon}\n🎪 ${evento.titolo}\n🏢 ${evento.nomeLocale}\n📍 ${evento.cittaProvincia}\n${categoria.icona} ${categoria.nome}\n\n`;
     });
+
+    const oggi = new Date().toDateString();
+    const eventiOggi = userStats[chatId]?.eventiOggi || 0;
+    messaggio += `📊 Eventi creati oggi: ${eventiOggi}/5`;
 
     bot.sendMessage(chatId, messaggio);
 });
 
 bot.onText(/\/ultimi/, (msg) => {
     const chatId = msg.chat.id;
+    if (checkBan(chatId)) return;
+    
     resetUserState(chatId);
     pulisciEventiScaduti();
 
@@ -258,7 +388,8 @@ bot.onText(/\/ultimi/, (msg) => {
     ultimi.forEach((evento, i) => {
         const categoria = categorieEventi[evento.categoria];
         const tipo = evento.tipo === 'Gratuito' ? '🆓' : '💰';
-        messaggio += `${i + 1}. ${evento.data} - ${evento.ora}\n🎪 ${evento.titolo}\n🏢 ${evento.nomeLocale}\n📍 ${evento.cittaProvincia}\n${tipo} ${categoria.icona}\n\n`;
+        const fotoIcon = evento.locandina ? '📸' : '';
+        messaggio += `${i + 1}. ${evento.data} - ${evento.ora} ${fotoIcon}\n🎪 ${evento.titolo}\n🏢 ${evento.nomeLocale}\n📍 ${evento.cittaProvincia}\n${tipo} ${categoria.icona}\n\n`;
     });
 
     bot.sendMessage(chatId, messaggio);
@@ -266,6 +397,8 @@ bot.onText(/\/ultimi/, (msg) => {
 
 bot.onText(/\/modifica_evento/, (msg) => {
     const chatId = msg.chat.id;
+    if (checkBan(chatId)) return;
+    
     const mieiEventi = eventi.filter(e => e.creatoDa === chatId);
 
     if (mieiEventi.length === 0) {
@@ -280,6 +413,8 @@ bot.onText(/\/modifica_evento/, (msg) => {
 
 bot.onText(/\/cancella_evento/, (msg) => {
     const chatId = msg.chat.id;
+    if (checkBan(chatId)) return;
+    
     const mieiEventi = eventi.filter(e => e.creatoDa === chatId);
 
     if (mieiEventi.length === 0) {
@@ -294,12 +429,16 @@ bot.onText(/\/cancella_evento/, (msg) => {
 
 bot.onText(/\/donazioni|\/caffè|\/caffe/, (msg) => {
     const chatId = msg.chat.id;
+    if (checkBan(chatId)) return;
+    
     resetUserState(chatId);
     bot.sendMessage(chatId, `☕ Sostieni il progetto!\n\n💰 Revolut: https://revolut.me/r/ZDIdqlisIP\n\nGrazie! 🙏 Ogni donazione aiuta a migliorare il bot.\n\n🎭 Continua a far ridere l'Italia!`);
 });
 
 bot.onText(/\/annulla/, (msg) => {
     const chatId = msg.chat.id;
+    if (checkBan(chatId)) return;
+    
     resetUserState(chatId);
     bot.sendMessage(chatId, '✅ Operazione annullata.');
 });
@@ -308,6 +447,11 @@ bot.onText(/\/annulla/, (msg) => {
 bot.on('callback_query', (query) => {
     const chatId = query.message.chat.id;
     const data = query.data;
+    
+    if (checkBan(chatId)) {
+        bot.answerCallbackQuery(query.id);
+        return;
+    }
 
     if (data.startsWith('categoria_')) {
         const categoria = data.split('_')[1];
@@ -321,6 +465,22 @@ bot.on('callback_query', (query) => {
         if (userStates[chatId]?.data) {
             const evento = userStates[chatId].data;
             evento.tipo = data === 'tipo_gratuito' ? 'Gratuito' : 'A pagamento';
+            setUserState(chatId, 'crea_locandina', evento);
+            
+            bot.sendMessage(chatId, '📸 Vuoi aggiungere una locandina?\n\n📷 Invia una foto oppure scrivi "skip" per saltare', {
+                reply_markup: {
+                    inline_keyboard: [
+                        [{text: '⏭️ Salta locandina', callback_data: 'skip_locandina'}]
+                    ]
+                }
+            });
+        }
+    } else if (data === 'skip_locandina') {
+        if (userStates[chatId]?.data) {
+            const evento = userStates[chatId].data;
+            evento.locandina = null;
+            
+            // Finalizza evento
             evento.id = Date.now() + Math.random();
             evento.dataCreazione = new Date();
             evento.creatoDa = chatId;
@@ -330,7 +490,7 @@ bot.on('callback_query', (query) => {
             salvaBackup();
 
             const categoria = categorieEventi[evento.categoria];
-            bot.sendMessage(chatId, `🎉 Evento creato!
+            bot.sendMessage(chatId, `🎉 Evento creato con successo!
 
 ${categoria.icona} ${categoria.nome}
 📅 ${evento.data} - ${evento.ora}
@@ -338,9 +498,7 @@ ${categoria.icona} ${categoria.nome}
 🏢 ${evento.nomeLocale}
 📍 ${evento.cittaProvincia}
 🎤 Posti: ${evento.postiComici}
-${evento.tipo === 'Gratuito' ? '🆓' : '💰'} ${evento.tipo}
-
-💾 Backup salvato!`);
+${evento.tipo === 'Gratuito' ? '🆓' : '💰'} ${evento.tipo}`);
             resetUserState(chatId);
         }
     } else if (data.startsWith('cancella_num_')) {
@@ -365,12 +523,55 @@ ${evento.tipo === 'Gratuito' ? '🆓' : '💰'} ${evento.tipo}
     bot.answerCallbackQuery(query.id);
 });
 
+// 📸 GESTIONE FOTO
+bot.on('photo', (msg) => {
+    const chatId = msg.chat.id;
+    
+    if (checkBan(chatId)) return;
+    
+    const userState = userStates[chatId];
+    
+    if (userState?.state === 'crea_locandina') {
+        // Prendi la foto di qualità migliore
+        const photo = msg.photo[msg.photo.length - 1];
+        
+        // Salva file_id della foto (per ora semplice)
+        userState.data.locandina = photo.file_id;
+        
+        // Finalizza evento
+        const evento = userState.data;
+        evento.id = Date.now() + Math.random();
+        evento.dataCreazione = new Date();
+        evento.creatoDa = chatId;
+
+        eventi.push(evento);
+        trackUserActivity(chatId, 'crea_evento');
+        salvaBackup();
+
+        const categoria = categorieEventi[evento.categoria];
+        bot.sendMessage(chatId, `🎉 Evento creato con locandina!
+
+${categoria.icona} ${categoria.nome}
+📅 ${evento.data} - ${evento.ora}
+🎪 ${evento.titolo}
+🏢 ${evento.nomeLocale}
+📍 ${evento.cittaProvincia}
+🎤 Posti: ${evento.postiComici}
+${evento.tipo === 'Gratuito' ? '🆓' : '💰'} ${evento.tipo}
+📸 Locandina caricata!`);
+        resetUserState(chatId);
+    } else {
+        bot.sendMessage(chatId, '📸 Foto ricevuta!\n\nPer caricare locandine eventi, usa /crea');
+    }
+});
+
 // 📝 GESTIONE MESSAGGI
 bot.on('message', (msg) => {
     const chatId = msg.chat.id;
     const text = msg.text;
 
-    if (!text || text.startsWith('/')) return;
+    if (!text || text.startsWith('/') || msg.photo) return;
+    if (checkBan(chatId)) return;
 
     const userState = userStates[chatId];
     
@@ -455,6 +656,36 @@ bot.on('message', (msg) => {
             });
             break;
 
+        case 'crea_locandina':
+            if (text.toLowerCase() === 'skip') {
+                const evento = userState.data;
+                evento.locandina = null;
+                
+                // Finalizza evento
+                evento.id = Date.now() + Math.random();
+                evento.dataCreazione = new Date();
+                evento.creatoDa = chatId;
+
+                eventi.push(evento);
+                trackUserActivity(chatId, 'crea_evento');
+                salvaBackup();
+
+                const categoria = categorieEventi[evento.categoria];
+                bot.sendMessage(chatId, `🎉 Evento creato con successo!
+
+${categoria.icona} ${categoria.nome}
+📅 ${evento.data} - ${evento.ora}
+🎪 ${evento.titolo}
+🏢 ${evento.nomeLocale}
+📍 ${evento.cittaProvincia}
+🎤 Posti: ${evento.postiComici}
+${evento.tipo === 'Gratuito' ? '🆓' : '💰'} ${evento.tipo}`);
+                resetUserState(chatId);
+            } else {
+                bot.sendMessage(chatId, '📸 Per aggiungere una locandina, invia una foto.\n\nOppure scrivi "skip" per saltare.');
+            }
+            break;
+
         case 'modifica_selezione':
             const mieiEventi = eventi.filter(e => e.creatoDa === chatId);
             const num = parseInt(text);
@@ -533,14 +764,29 @@ function cercaEventi(chatId, query) {
         return new Date(aa, ma - 1, ga) - new Date(ab, mb - 1, gb);
     });
 
-    let messaggio = `🎭 Eventi per "${query}" (${trovati.length}):\n\n`;
+    // Invia eventi uno per uno se hanno locandina
     trovati.forEach((evento, i) => {
         const categoria = categorieEventi[evento.categoria];
         const tipo = evento.tipo === 'Gratuito' ? '🆓' : '💰';
-        messaggio += `${i + 1}. ${evento.data} - ${evento.ora}\n🎪 ${evento.titolo}\n🏢 ${evento.nomeLocale}\n📍 ${evento.cittaProvincia}\n🎤 Posti: ${evento.postiComici}\n${tipo} ${categoria.icona}\n\n`;
+        
+        const messaggio = `${i + 1}. ${evento.data} - ${evento.ora}
+🎪 ${evento.titolo}
+🏢 ${evento.nomeLocale}
+📍 ${evento.cittaProvincia}
+🎤 Posti: ${evento.postiComici}
+${tipo} ${categoria.icona}`;
+
+        if (evento.locandina) {
+            bot.sendPhoto(chatId, evento.locandina, { caption: messaggio });
+        } else {
+            bot.sendMessage(chatId, messaggio);
+        }
     });
 
-    bot.sendMessage(chatId, messaggio);
+    // Messaggio finale
+    setTimeout(() => {
+        bot.sendMessage(chatId, `📊 Trovati ${trovati.length} eventi per "${query}"`);
+    }, 1000);
 }
 
 // Gestione errori
@@ -551,5 +797,7 @@ bot.on('polling_error', (error) => console.error('❌ Polling error:', error));
 console.log(`🎭 Bot Comedy v.${VERSION} avviato!`);
 console.log('💾 Backup automatico attivo');
 console.log('🔐 Comandi admin nascosti');
+console.log('📸 Sistema locandine attivo');
+console.log('🚫 Sistema ban attivo');
 
 module.exports = bot;
