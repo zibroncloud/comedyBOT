@@ -1,19 +1,23 @@
 const TelegramBot = require('node-telegram-bot-api');
+const fs = require('fs');
+const path = require('path');
 
-// Configurazione bot - Token da variabile ambiente
+// Configurazione
 const TOKEN = process.env.BOT_TOKEN;
+const ADMIN_ID = '827798574'; // Chat ID di @dinobronzi82
+const BACKUP_FILE = path.join(__dirname, 'comedy_backup.json');
+const VERSION = '22.5';
 
 if (!TOKEN) {
-    console.error('❌ ERRORE: BOT_TOKEN non trovato nelle variabili ambiente!');
+    console.error('❌ ERRORE: BOT_TOKEN non trovato!');
     process.exit(1);
 }
 
 const bot = new TelegramBot(TOKEN, {polling: true});
 
-// Database eventi in memoria
+// Database
 let eventi = [];
-
-// Stati utente per la gestione dei flussi
+let userStats = {};
 const userStates = {};
 
 // Categorie eventi
@@ -23,195 +27,186 @@ const categorieEventi = {
     'W': { nome: 'Corso/Workshop', icona: '📚' }
 };
 
-// Funzione per pulire stati utente inattivi
-function pulisciStatiInattivi() {
-    const ora = new Date();
-    const quindiMinutiFa = new Date(ora.getTime() - (15 * 60 * 1000));
-
-    Object.keys(userStates).forEach(chatId => {
-        messaggio += `${index + 1}. ${evento.data} - ${evento.ora}\n`;
-        messaggio += `🎪 ${evento.titolo}\n`;
-        messaggio += `🏢 ${evento.nomeLocale}\n`;
-        messaggio += `📍 ${evento.indirizzoVia || 'Indirizzo non specificato'}\n`;
-        messaggio += `🗺️ ${evento.cittaProvincia}\n`;
-        messaggio += `🎤 Posti comici: ${evento.postiComici}\n`;
-        messaggio += `👤 ${evento.organizzatoreInfo || 'Organizzatore non specificato'}\n`;
-        messaggio += `${tipoIcon} ${evento.tipo}\n`;
-        messaggio += `${categoriaInfo.icona} ${categoriaInfo.nome}\n\n`;
-    });
-
-    messaggio += `📊 Totale eventi: ${eventiTrovati.length}`;
-
-    bot.sendMessage(chatId, messaggio);
+// 🗄️ SISTEMA BACKUP
+function salvaBackup() {
+    try {
+        const backup = { eventi, userStats, timestamp: new Date().toISOString(), version: VERSION };
+        fs.writeFileSync(BACKUP_FILE, JSON.stringify(backup, null, 2));
+        console.log('✅ Backup salvato:', new Date().toLocaleString());
+        return true;
+    } catch (error) {
+        console.error('❌ Errore backup:', error);
+        return false;
+    }
 }
 
-// Gestione errori
-bot.on('error', (error) => {
-    console.error('❌ Errore bot:', error);
-});
+function caricaBackup() {
+    try {
+        if (fs.existsSync(BACKUP_FILE)) {
+            const backup = JSON.parse(fs.readFileSync(BACKUP_FILE, 'utf8'));
+            eventi = backup.eventi || [];
+            userStats = backup.userStats || {};
+            console.log(`✅ Backup caricato: ${eventi.length} eventi, ${Object.keys(userStats).length} utenti`);
+            return true;
+        }
+        console.log('📝 Nessun backup trovato');
+        return false;
+    } catch (error) {
+        console.error('❌ Errore caricamento:', error);
+        eventi = [];
+        userStats = {};
+        return false;
+    }
+}
 
-// Gestione polling errors
-bot.on('polling_error', (error) => {
-    console.error('❌ Errore polling:', error);
-});
+// Utility functions
+const isAdmin = (chatId) => chatId.toString() === ADMIN_ID;
+const resetUserState = (chatId) => delete userStates[chatId];
+const setUserState = (chatId, state, data = {}) => {
+    userStates[chatId] = { state, data, lastActivity: new Date() };
+};
 
-// Avvio bot
-console.log('🎭 Bot Standup Comedy v.22.4 avviato!');
-console.log('🚀 Bot online 24/7 - Deploy di successo!');
+function trackUserActivity(chatId, action) {
+    if (!userStats[chatId]) {
+        userStats[chatId] = {
+            eventiCreati: 0,
+            ultimoEvento: null,
+            primoUso: new Date().toISOString(),
+            ultimoUso: new Date().toISOString()
+        };
+    }
+    userStats[chatId].ultimoUso = new Date().toISOString();
+    if (action === 'crea_evento') {
+        userStats[chatId].eventiCreati++;
+        userStats[chatId].ultimoEvento = new Date().toISOString();
+    }
+}
 
-// Esporta per uso in altri file
-module.exports = bot;if (userStates[chatId] && userStates[chatId].lastActivity < quindiMinutiFa) {
+function pulisciEventiScaduti() {
+    const unaSettimanaFa = new Date(Date.now() - (7 * 24 * 60 * 60 * 1000));
+    const eventiPrima = eventi.length;
+    eventi = eventi.filter(evento => {
+        const [g, m, a] = evento.data.split('/');
+        return new Date(a, m - 1, g) >= unaSettimanaFa;
+    });
+    if (eventiPrima !== eventi.length) {
+        console.log(`Rimossi ${eventiPrima - eventi.length} eventi scaduti`);
+        salvaBackup();
+    }
+}
+
+function pulisciStatiInattivi() {
+    const quindiMinutiFa = new Date(Date.now() - (15 * 60 * 1000));
+    Object.keys(userStates).forEach(chatId => {
+        if (userStates[chatId]?.lastActivity < quindiMinutiFa) {
             delete userStates[chatId];
         }
     });
 }
 
-// Funzione per pulire eventi scaduti
-function pulisciEventiScaduti() {
-    const ora = new Date();
-    const unaSettimanaFa = new Date(ora.getTime() - (7 * 24 * 60 * 60 * 1000));
-
-    const eventiPrima = eventi.length;
-    eventi = eventi.filter(evento => {
-        const parti = evento.data.split('/');
-        const dataEvento = new Date(parti[2], parti[1] - 1, parti[0]);
-        return dataEvento >= unaSettimanaFa;
-    });
-
-    if (eventiPrima !== eventi.length) {
-        console.log(`Rimossi ${eventiPrima - eventi.length} eventi scaduti`);
-    }
-}
-
-// Pulizia automatica ogni ora
+// Avvio e caricamento
+caricaBackup();
+setInterval(salvaBackup, 30 * 60 * 1000);
 setInterval(pulisciEventiScaduti, 60 * 60 * 1000);
 setInterval(pulisciStatiInattivi, 15 * 60 * 1000);
 
-// Funzione per resettare stato utente
-function resetUserState(chatId) {
-    delete userStates[chatId];
-}
+// Salvataggio all'uscita
+process.on('SIGINT', () => { salvaBackup(); process.exit(0); });
+process.on('SIGTERM', () => { salvaBackup(); process.exit(0); });
 
-// Funzione per impostare stato utente
-function setUserState(chatId, state, data = {}) {
-    userStates[chatId] = {
-        state: state,
-        data: data,
-        lastActivity: new Date()
-    };
-}
+// 🔐 COMANDI ADMIN (nascosti)
+bot.onText(/\/backup/, (msg) => {
+    const chatId = msg.chat.id;
+    if (!isAdmin(chatId)) return;
+    
+    const success = salvaBackup();
+    bot.sendMessage(chatId, success ? 
+        `✅ Backup salvato!\n📊 ${eventi.length} eventi, ${Object.keys(userStats).length} utenti` : 
+        '❌ Errore backup!');
+});
 
-// Comando /start
+bot.onText(/\/stats/, (msg) => {
+    const chatId = msg.chat.id;
+    if (!isAdmin(chatId)) return;
+    
+    const eventiAttivi = eventi.filter(e => {
+        const [g, m, a] = e.data.split('/');
+        return new Date(a, m - 1, g) >= new Date();
+    });
+    
+    const oggi = new Date().toDateString();
+    const eventiOggi = eventi.filter(e => new Date(e.dataCreazione).toDateString() === oggi);
+    
+    bot.sendMessage(chatId, `📊 Stats Bot v.${VERSION}:
+🎭 Eventi: ${eventi.length} (${eventiAttivi.length} attivi)
+👥 Utenti: ${Object.keys(userStats).length}
+📈 Oggi: ${eventiOggi.length} nuovi eventi
+💾 Backup: ${new Date().toLocaleString()}`);
+});
+
+// 📱 COMANDI PUBBLICI
 bot.onText(/\/start/, (msg) => {
     const chatId = msg.chat.id;
     resetUserState(chatId);
+    trackUserActivity(chatId, 'start');
 
-    const welcomeMessage = `
-🎭 Benvenuto nel Bot Standup Comedy! 🎤 v.22.4
-da un'idea di @dinobronzi82
-Organizza e trova eventi di standup comedy in tutta Italia!
+    bot.sendMessage(chatId, `🎭 Bot Standup Comedy v.${VERSION} 🎤
+da @dinobronzi82 - Eventi comedy in Italia!
 
-🎯 Comandi disponibili:
+🎯 Comandi:
 /cerca - Cerca eventi per provincia
-/crea - Crea un nuovo evento
-/miei_eventi - Vedi i tuoi eventi
+/crea - Crea nuovo evento
+/miei_eventi - I tuoi eventi
 /modifica_evento - Modifica data evento
-/cancella_evento - Cancella un evento
-/ultimi - Ultimi 20 eventi inseriti
-/annulla - Annulla operazione corrente
+/cancella_evento - Cancella evento
+/ultimi - Ultimi 20 eventi
 /donazioni - Sostieni il progetto
-/help - Mostra questo messaggio
+/help - Guida completa
 
-🎪 Categorie eventi:
-🎤 Serata Stand-up (S)
-🎪 Festival (F)
-📚 Corso/Workshop (W)
+🎪 Categorie: 🎤 Serata • 🎪 Festival • 📚 Workshop
+🚀 Sempre online 24/7 con backup automatico!
 
-🚀 Trova il tuo palco o scopri nuovi talenti!
-
-⚠️ Bot sempre online 24/7!
-`;
-
-    bot.sendMessage(chatId, welcomeMessage);
+📧 Per problemi, complimenti e suggerimenti:
+zibroncloud@gmail.com 😉`);
 });
 
-// Comando /help
 bot.onText(/\/help/, (msg) => {
     const chatId = msg.chat.id;
     resetUserState(chatId);
 
-    const helpMessage = `
-🎭 Guida Bot Standup Comedy v.22.4
+    bot.sendMessage(chatId, `🎭 Guida Bot Comedy v.${VERSION}
 
-Comandi principali:
-• /cerca - Trova eventi per provincia
-• /crea - Aggiungi un nuovo evento
-• /miei_eventi - Vedi i tuoi eventi
-• /modifica_evento - Modifica data di un evento
-• /cancella_evento - Cancella un evento
-• /ultimi - Ultimi 20 eventi inseriti
-• /annulla - Annulla operazione corrente
-• /donazioni - Sostieni il progetto
+🔍 Ricerca eventi:
+• Sigla provincia: MI, RM, TO
+• Nome città: Milano, Roma, Torino  
+• Zone Milano/Roma: Milano Nord, Roma Centro
 
-Come cercare eventi:
-• Scrivi la sigla provincia (es: MI, RM, TO, ROMA)
-• Scrivi il nome città (es: Milano, Roma)
-• Per Roma e Milano puoi specificare la zona (es: "Milano Nord")
+🎪 Categorie:
+🎤 Serata Stand-up - Serate comedy
+🎪 Festival - Festival e rassegne
+📚 Corso/Workshop - Corsi e workshop
 
-Categorie eventi:
-🎤 Serata Stand-up (S) - Serate di comicità
-🎪 Festival (F) - Festival e rassegne
-📚 Corso/Workshop (W) - Corsi e workshop
+⚡ Note:
+• Eventi eliminati dopo 1 settimana
+• Roma/Milano divise in 3 zone
+• /annulla per interrompere operazioni
 
-Note:
-• Gli eventi vengono eliminati automaticamente 1 settimana dopo la data
-• Roma e Milano sono divise in 3 zone: Nord, Centro, Sud
-• Puoi usare /annulla per interrompere qualsiasi operazione
-`;
-
-    bot.sendMessage(chatId, helpMessage);
+📧 Per problemi, complimenti e suggerimenti:
+zibroncloud@gmail.com 😉`);
 });
 
-// Comando /annulla
-bot.onText(/\/annulla/, (msg) => {
-    const chatId = msg.chat.id;
-    resetUserState(chatId);
-    bot.sendMessage(chatId, '✅ Operazione annullata. Puoi usare i comandi normalmente.');
-});
-
-// Comando /donazioni
-bot.onText(/\/donazioni|\/caffè|\/caffe/, (msg) => {
-    const chatId = msg.chat.id;
-    resetUserState(chatId);
-
-    const donationMessage = `
-☕ Mi paghi un caffè?
-
-💰 Sostieni il progetto con 2 € su Revolut!
-https://revolut.me/r/ZDIdqlisIP
-
-Grazie per il supporto! 🙏
-Ogni donazione aiuta a mantenere il bot attivo e migliorare il servizio.
-
-🎭 Continua a fare ridere l'Italia!
-`;
-
-    bot.sendMessage(chatId, donationMessage);
-});
-
-// Comando /cerca
 bot.onText(/\/cerca/, (msg) => {
     const chatId = msg.chat.id;
     setUserState(chatId, 'cerca');
-    bot.sendMessage(chatId, 'Scrivi la provincia o città dove vuoi cercare eventi di standup:\n\nEsempi: MI, Milano, Roma Nord, TO, Torino, ROMA\n\nUsa /annulla per annullare.');
+    bot.sendMessage(chatId, 'Scrivi provincia/città per cercare eventi:\n\nEs: MI, Milano, Roma Nord, TO\n\n/annulla per uscire');
 });
 
-// Comando /crea
 bot.onText(/\/crea/, (msg) => {
     const chatId = msg.chat.id;
     setUserState(chatId, 'crea_categoria');
+    trackUserActivity(chatId, 'inizio_creazione');
 
-    const keyboardCategoria = {
+    bot.sendMessage(chatId, 'Che tipo di evento organizzi?', {
         reply_markup: {
             inline_keyboard: [
                 [{text: '🎤 Serata Stand-up', callback_data: 'categoria_S'}],
@@ -219,230 +214,158 @@ bot.onText(/\/crea/, (msg) => {
                 [{text: '📚 Corso/Workshop', callback_data: 'categoria_W'}]
             ]
         }
-    };
-
-    bot.sendMessage(chatId, 'Iniziamo! Che tipo di evento stai organizzando?\n\nUsa /annulla per annullare.', keyboardCategoria);
+    });
 });
 
-// Comando /miei_eventi
 bot.onText(/\/miei_eventi/, (msg) => {
     const chatId = msg.chat.id;
     resetUserState(chatId);
-
     pulisciEventiScaduti();
 
-    const mieiEventi = eventi.filter(evento => evento.creatoDa === chatId);
+    const mieiEventi = eventi.filter(e => e.creatoDa === chatId).sort((a, b) => {
+        const [ga, ma, aa] = a.data.split('/');
+        const [gb, mb, ab] = b.data.split('/');
+        return new Date(aa, ma - 1, ga) - new Date(ab, mb - 1, gb);
+    });
 
     if (mieiEventi.length === 0) {
-        bot.sendMessage(chatId, '❌ Non hai ancora creato nessun evento.\n\nUsa /crea per aggiungere il tuo primo evento!');
+        bot.sendMessage(chatId, '❌ Nessun evento creato. Usa /crea per iniziare!');
         return;
     }
 
-    mieiEventi.sort((a, b) => {
-        const parti_a = a.data.split('/');
-        const parti_b = b.data.split('/');
-        const dataA = new Date(parti_a[2], parti_a[1] - 1, parti_a[0]);
-        const dataB = new Date(parti_b[2], parti_b[1] - 1, parti_b[0]);
-        return dataA - dataB;
+    let messaggio = `🎭 I tuoi eventi (${mieiEventi.length}):\n\n`;
+    mieiEventi.forEach((evento, i) => {
+        const categoria = categorieEventi[evento.categoria];
+        messaggio += `${i + 1}. ${evento.data} - ${evento.ora}\n🎪 ${evento.titolo}\n🏢 ${evento.nomeLocale}\n📍 ${evento.cittaProvincia}\n${categoria.icona} ${categoria.nome}\n\n`;
     });
-
-    let messaggio = `🎭 I tuoi eventi:\n\n`;
-
-    mieiEventi.forEach((evento, index) => {
-        const tipoIcon = evento.tipo === 'Gratuito' ? '🆓' : '💰';
-        const categoriaInfo = categorieEventi[evento.categoria] || { nome: 'Non specificata', icona: '❓' };
-
-        messaggio += `${index + 1}. ${evento.data} - ${evento.ora}\n`;
-        messaggio += `🎪 ${evento.titolo}\n`;
-        messaggio += `🏢 ${evento.nomeLocale}\n`;
-        messaggio += `📍 ${evento.indirizzoVia || 'Indirizzo non specificato'}\n`;
-        messaggio += `🗺️ ${evento.cittaProvincia}\n`;
-        messaggio += `🎤 Posti comici: ${evento.postiComici}\n`;
-        messaggio += `👤 ${evento.organizzatoreInfo || 'Organizzatore non specificato'}\n`;
-        messaggio += `${tipoIcon} ${evento.tipo}\n`;
-        messaggio += `${categoriaInfo.icona} ${categoriaInfo.nome}\n\n`;
-    });
-
-    messaggio += `📊 Totale tuoi eventi: ${mieiEventi.length}`;
 
     bot.sendMessage(chatId, messaggio);
 });
 
-// Comando /ultimi
 bot.onText(/\/ultimi/, (msg) => {
     const chatId = msg.chat.id;
     resetUserState(chatId);
-
     pulisciEventiScaduti();
 
     if (eventi.length === 0) {
-        bot.sendMessage(chatId, '🎭 Non ci sono eventi al momento. Pubblica il primo!');
+        bot.sendMessage(chatId, '🎭 Nessun evento. Pubblica il primo!');
         return;
     }
 
-    const ultimi20 = eventi
-        .sort((a, b) => new Date(b.dataCreazione) - new Date(a.dataCreazione))
-        .slice(0, 20);
-
-    let messaggio = `🆕 Ultimi ${ultimi20.length} eventi inseriti:\n\n`;
-
-    ultimi20.forEach((evento, index) => {
-        const tipoIcon = evento.tipo === 'Gratuito' ? '🆓' : '💰';
-        const categoriaInfo = categorieEventi[evento.categoria] || { nome: 'Non specificata', icona: '❓' };
-
-        messaggio += `${index + 1}. ${evento.data} - ${evento.ora}\n`;
-        messaggio += `🎪 ${evento.titolo}\n`;
-        messaggio += `🏢 ${evento.nomeLocale}\n`;
-        messaggio += `📍 ${evento.indirizzoVia || 'Indirizzo non specificato'}\n`;
-        messaggio += `🗺️ ${evento.cittaProvincia}\n`;
-        messaggio += `🎤 Posti comici: ${evento.postiComici}\n`;
-        messaggio += `👤 ${evento.organizzatoreInfo || 'Organizzatore non specificato'}\n`;
-        messaggio += `${tipoIcon} ${evento.tipo}\n`;
-        messaggio += `${categoriaInfo.icona} ${categoriaInfo.nome}\n\n`;
+    const ultimi = eventi.sort((a, b) => new Date(b.dataCreazione) - new Date(a.dataCreazione)).slice(0, 20);
+    
+    let messaggio = `🆕 Ultimi ${ultimi.length} eventi:\n\n`;
+    ultimi.forEach((evento, i) => {
+        const categoria = categorieEventi[evento.categoria];
+        const tipo = evento.tipo === 'Gratuito' ? '🆓' : '💰';
+        messaggio += `${i + 1}. ${evento.data} - ${evento.ora}\n🎪 ${evento.titolo}\n🏢 ${evento.nomeLocale}\n📍 ${evento.cittaProvincia}\n${tipo} ${categoria.icona}\n\n`;
     });
-
-    messaggio += `📊 Mostrando gli ultimi ${ultimi20.length} eventi di ${eventi.length} totali`;
 
     bot.sendMessage(chatId, messaggio);
 });
 
-// Comando /modifica_evento
 bot.onText(/\/modifica_evento/, (msg) => {
     const chatId = msg.chat.id;
-
-    const mieiEventi = eventi.filter(evento => evento.creatoDa === chatId);
+    const mieiEventi = eventi.filter(e => e.creatoDa === chatId);
 
     if (mieiEventi.length === 0) {
         resetUserState(chatId);
-        bot.sendMessage(chatId, '❌ Non hai eventi da modificare.\n\nUsa /crea per aggiungere un evento!');
+        bot.sendMessage(chatId, '❌ Nessun evento da modificare. Usa /crea!');
         return;
     }
 
     setUserState(chatId, 'modifica_selezione');
-    bot.sendMessage(chatId, 'Scrivi il numero dell\'evento da modificare (1, 2, 3...).\n\nUsa /miei_eventi per vedere la lista numerata.\nUsa /annulla per annullare.');
+    bot.sendMessage(chatId, 'Numero evento da modificare (1,2,3...):\n\nUsa /miei_eventi per la lista');
 });
 
-// Comando /cancella_evento
 bot.onText(/\/cancella_evento/, (msg) => {
     const chatId = msg.chat.id;
-
-    const mieiEventi = eventi.filter(evento => evento.creatoDa === chatId);
+    const mieiEventi = eventi.filter(e => e.creatoDa === chatId);
 
     if (mieiEventi.length === 0) {
         resetUserState(chatId);
-        bot.sendMessage(chatId, '❌ Non hai eventi da cancellare.\n\nUsa /crea per aggiungere un evento!');
+        bot.sendMessage(chatId, '❌ Nessun evento da cancellare. Usa /crea!');
         return;
     }
 
     setUserState(chatId, 'cancella_selezione');
-    bot.sendMessage(chatId, 'Scrivi il numero dell\'evento da cancellare (1, 2, 3...).\n\nUsa /miei_eventi per vedere la lista numerata.\nUsa /annulla per annullare.');
+    bot.sendMessage(chatId, 'Numero evento da cancellare (1,2,3...):\n\nUsa /miei_eventi per la lista');
 });
 
-// Gestione callback query
-bot.on('callback_query', (callbackQuery) => {
-    const chatId = callbackQuery.message.chat.id;
-    const data = callbackQuery.data;
+bot.onText(/\/donazioni|\/caffè|\/caffe/, (msg) => {
+    const chatId = msg.chat.id;
+    resetUserState(chatId);
+    bot.sendMessage(chatId, `☕ Sostieni il progetto!\n\n💰 Revolut: https://revolut.me/r/ZDIdqlisIP\n\nGrazie! 🙏 Ogni donazione aiuta a migliorare il bot.\n\n🎭 Continua a far ridere l'Italia!`);
+});
 
-    if (data === 'categoria_S' || data === 'categoria_F' || data === 'categoria_W') {
+bot.onText(/\/annulla/, (msg) => {
+    const chatId = msg.chat.id;
+    resetUserState(chatId);
+    bot.sendMessage(chatId, '✅ Operazione annullata.');
+});
+
+// 🎯 GESTIONE CALLBACK
+bot.on('callback_query', (query) => {
+    const chatId = query.message.chat.id;
+    const data = query.data;
+
+    if (data.startsWith('categoria_')) {
+        const categoria = data.split('_')[1];
         if (userStates[chatId]) {
-            const categoria = data.split('_')[1];
             if (!userStates[chatId].data) userStates[chatId].data = {};
             userStates[chatId].data.categoria = categoria;
             setUserState(chatId, 'crea_data', userStates[chatId].data);
-
-            bot.sendMessage(chatId, 'Perfetto! Ora scrivi la data dell\'evento (formato: GG/MM/AAAA)\n\nEsempio: 25/12/2024');
+            bot.sendMessage(chatId, 'Data evento (GG/MM/AAAA):\n\nEs: 25/12/2024');
         }
-
-    } else if (data === 'tipo_gratuito') {
-        if (userStates[chatId] && userStates[chatId].data) {
-            userStates[chatId].data.tipo = 'Gratuito';
-
+    } else if (data === 'tipo_gratuito' || data === 'tipo_pagamento') {
+        if (userStates[chatId]?.data) {
             const evento = userStates[chatId].data;
+            evento.tipo = data === 'tipo_gratuito' ? 'Gratuito' : 'A pagamento';
             evento.id = Date.now() + Math.random();
             evento.dataCreazione = new Date();
             evento.creatoDa = chatId;
 
             eventi.push(evento);
+            trackUserActivity(chatId, 'crea_evento');
+            salvaBackup();
 
-            const categoriaInfo = categorieEventi[evento.categoria] || { nome: 'Non specificata', icona: '❓' };
-            const riepilogo = `
-🎉 Evento creato con successo!
+            const categoria = categorieEventi[evento.categoria];
+            bot.sendMessage(chatId, `🎉 Evento creato!
 
-${categoriaInfo.icona} Categoria: ${categoriaInfo.nome}
-📅 Data: ${evento.data}
-🕐 Ora: ${evento.ora}
-🎪 Titolo: ${evento.titolo}
-🏢 Locale: ${evento.nomeLocale}
-📍 Indirizzo: ${evento.indirizzoVia || 'Non specificato'}
-🗺️ Città/Provincia: ${evento.cittaProvincia}
-🎤 Posti comici: ${evento.postiComici}
-👤 Organizzatore/MC: ${evento.organizzatoreInfo || 'Non specificato'}
-🆓 Tipo: Gratuito
+${categoria.icona} ${categoria.nome}
+📅 ${evento.data} - ${evento.ora}
+🎪 ${evento.titolo}
+🏢 ${evento.nomeLocale}
+📍 ${evento.cittaProvincia}
+🎤 Posti: ${evento.postiComici}
+${evento.tipo === 'Gratuito' ? '🆓' : '💰'} ${evento.tipo}
 
-L'evento sarà visibile per una settimana dopo la data dell'evento.
-`;
-
+💾 Backup salvato!`);
             resetUserState(chatId);
-            bot.sendMessage(chatId, riepilogo);
         }
-
-    } else if (data === 'tipo_pagamento') {
-        if (userStates[chatId] && userStates[chatId].data) {
-            userStates[chatId].data.tipo = 'A pagamento';
-
-            const evento = userStates[chatId].data;
-            evento.id = Date.now() + Math.random();
-            evento.dataCreazione = new Date();
-            evento.creatoDa = chatId;
-
-            eventi.push(evento);
-
-            const categoriaInfo = categorieEventi[evento.categoria] || { nome: 'Non specificata', icona: '❓' };
-            const riepilogo = `
-🎉 Evento creato con successo!
-
-${categoriaInfo.icona} Categoria: ${categoriaInfo.nome}
-📅 Data: ${evento.data}
-🕐 Ora: ${evento.ora}
-🎪 Titolo: ${evento.titolo}
-🏢 Locale: ${evento.nomeLocale}
-📍 Indirizzo: ${evento.indirizzoVia || 'Non specificato'}
-🗺️ Città/Provincia: ${evento.cittaProvincia}
-🎤 Posti comici: ${evento.postiComici}
-👤 Organizzatore/MC: ${evento.organizzatoreInfo || 'Non specificato'}
-💰 Tipo: A pagamento
-
-L'evento sarà visibile per una settimana dopo la data dell'evento.
-`;
-
-            resetUserState(chatId);
-            bot.sendMessage(chatId, riepilogo);
-        }
-
     } else if (data.startsWith('cancella_num_')) {
-        const numeroEvento = parseInt(data.split('_')[2]);
-        const mieiEventi = eventi.filter(evento => evento.creatoDa === chatId);
-        const evento = mieiEventi[numeroEvento - 1];
+        const num = parseInt(data.split('_')[2]);
+        const mieiEventi = eventi.filter(e => e.creatoDa === chatId);
+        const evento = mieiEventi[num - 1];
 
         if (evento) {
-            const indiceGlobale = eventi.findIndex(e => e.id === evento.id);
-            if (indiceGlobale !== -1) {
-                eventi.splice(indiceGlobale, 1);
+            const index = eventi.findIndex(e => e.id === evento.id);
+            if (index !== -1) {
+                eventi.splice(index, 1);
+                salvaBackup();
             }
-
+            bot.sendMessage(chatId, `✅ Evento cancellato!\n📅 ${evento.data} - ${evento.nomeLocale}`);
             resetUserState(chatId);
-            bot.sendMessage(chatId, `✅ Evento cancellato con successo!\n\n📅 Data: ${evento.data} - ${evento.ora}\n🏢 Locale: ${evento.nomeLocale}\n\n🗑️ L'evento è stato rimosso definitivamente.`);
         }
-
     } else if (data === 'mantieni_evento') {
         resetUserState(chatId);
-        bot.sendMessage(chatId, '✅ Evento mantenuto\n\nL\'evento non è stato cancellato.');
+        bot.sendMessage(chatId, '✅ Evento mantenuto.');
     }
 
-    bot.answerCallbackQuery(callbackQuery.id);
+    bot.answerCallbackQuery(query.id);
 });
 
-// Gestione messaggi in base allo stato
+// 📝 GESTIONE MESSAGGI
 bot.on('message', (msg) => {
     const chatId = msg.chat.id;
     const text = msg.text;
@@ -450,7 +373,7 @@ bot.on('message', (msg) => {
     if (!text || text.startsWith('/')) return;
 
     const userState = userStates[chatId];
-
+    
     if (!userState) {
         cercaEventi(chatId, text);
         return;
@@ -466,181 +389,167 @@ bot.on('message', (msg) => {
 
         case 'crea_data':
             if (!/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(text)) {
-                bot.sendMessage(chatId, 'Formato data non valido. Usa GG/MM/AAAA (es: 25/12/2024)');
+                bot.sendMessage(chatId, 'Formato non valido. Usa GG/MM/AAAA');
                 return;
             }
-            if (!userState.data) userState.data = {};
             userState.data.data = text;
             setUserState(chatId, 'crea_ora', userState.data);
-            bot.sendMessage(chatId, 'Perfetto! Ora scrivi l\'ora (formato: HH:MM)');
+            bot.sendMessage(chatId, 'Ora evento (HH:MM):\n\nEs: 21:30');
             break;
 
         case 'crea_ora':
             if (!/^\d{1,2}:\d{2}$/.test(text)) {
-                bot.sendMessage(chatId, 'Formato ora non valido. Usa HH:MM (es: 21:30)');
+                bot.sendMessage(chatId, 'Formato non valido. Usa HH:MM');
                 return;
             }
             userState.data.ora = text;
             setUserState(chatId, 'crea_titolo', userState.data);
-            bot.sendMessage(chatId, 'Ottimo! Ora scrivi il titolo della serata (es: "Comedy Night", "Open Mic Giovedì", "Festival della Risata"):');
+            bot.sendMessage(chatId, 'Titolo serata:\n\nEs: "Comedy Night", "Open Mic"');
             break;
 
         case 'crea_titolo':
             userState.data.titolo = text;
             setUserState(chatId, 'crea_nome_locale', userState.data);
-            bot.sendMessage(chatId, 'Perfetto! Ora scrivi il nome del locale/teatro dove si terrà l\'evento:');
+            bot.sendMessage(chatId, 'Nome locale/teatro:');
             break;
 
         case 'crea_nome_locale':
             userState.data.nomeLocale = text;
             setUserState(chatId, 'crea_indirizzo_via', userState.data);
-            bot.sendMessage(chatId, 'Ora scrivi l\'indirizzo/via del locale (facoltativo - scrivi "skip" per saltare):');
+            bot.sendMessage(chatId, 'Indirizzo (scrivi "skip" per saltare):');
             break;
 
         case 'crea_indirizzo_via':
-            if (text.toLowerCase() === 'skip' || text.trim() === '') {
-                userState.data.indirizzoVia = '';
-            } else {
-                userState.data.indirizzoVia = text.trim();
-            }
+            userState.data.indirizzoVia = text.toLowerCase() === 'skip' ? '' : text.trim();
             setUserState(chatId, 'crea_citta_provincia', userState.data);
-            bot.sendMessage(chatId, 'Ora scrivi città e provincia (es: Trieste, TS - Crotone, KR - ecc.)\n\nN.B. Per Milano e Roma puoi specificare anche la zona, tra Nord, Centro e Sud (es: Milano Nord, Roma Centro):');
+            bot.sendMessage(chatId, 'Città e provincia:\n\nEs: Milano, MI - Roma Centro, RM');
             break;
 
         case 'crea_citta_provincia':
             userState.data.cittaProvincia = text.toUpperCase();
             setUserState(chatId, 'crea_posti', userState.data);
-            bot.sendMessage(chatId, 'Quanti posti per comici sono disponibili? (scrivi solo il numero)');
+            bot.sendMessage(chatId, 'Posti comici disponibili (solo numero):');
             break;
 
         case 'crea_posti':
             if (!/^\d+$/.test(text)) {
-                bot.sendMessage(chatId, 'Inserisci solo un numero (es: 10)');
+                bot.sendMessage(chatId, 'Inserisci solo un numero');
                 return;
             }
             userState.data.postiComici = parseInt(text);
             setUserState(chatId, 'crea_organizzatore', userState.data);
-            bot.sendMessage(chatId, 'Chi è l\'organizzatore/MC/riferimento per info? (facoltativo - scrivi "skip" per saltare):');
+            bot.sendMessage(chatId, 'Organizzatore/MC ("skip" per saltare):');
             break;
 
         case 'crea_organizzatore':
-            if (text.toLowerCase() === 'skip' || text.trim() === '') {
-                userState.data.organizzatoreInfo = '';
-            } else {
-                userState.data.organizzatoreInfo = text.trim();
-            }
+            userState.data.organizzatoreInfo = text.toLowerCase() === 'skip' ? '' : text.trim();
             setUserState(chatId, 'crea_tipo', userState.data);
-
-            const keyboardTipo = {
+            
+            bot.sendMessage(chatId, 'Evento gratuito o a pagamento?', {
                 reply_markup: {
                     inline_keyboard: [
                         [{text: '🆓 Gratuito', callback_data: 'tipo_gratuito'}],
                         [{text: '💰 A pagamento', callback_data: 'tipo_pagamento'}]
                     ]
                 }
-            };
-            bot.sendMessage(chatId, 'L\'evento è gratuito o a pagamento?', keyboardTipo);
+            });
             break;
 
         case 'modifica_selezione':
-            const mieiEventi = eventi.filter(evento => evento.creatoDa === chatId);
-            const numeroEvento = parseInt(text);
-
-            if (isNaN(numeroEvento) || numeroEvento < 1 || numeroEvento > mieiEventi.length) {
-                bot.sendMessage(chatId, `❌ Numero non valido. Scegli un numero da 1 a ${mieiEventi.length}`);
+            const mieiEventi = eventi.filter(e => e.creatoDa === chatId);
+            const num = parseInt(text);
+            
+            if (isNaN(num) || num < 1 || num > mieiEventi.length) {
+                bot.sendMessage(chatId, `❌ Numero non valido (1-${mieiEventi.length})`);
                 return;
             }
-
-            const eventoMod = mieiEventi[numeroEvento - 1];
-            setUserState(chatId, 'modifica_data', {eventoId: eventoMod.id, numeroEvento});
-
-            bot.sendMessage(chatId, `Stai modificando l'evento N.${numeroEvento}:\n${eventoMod.data} - ${eventoMod.ora}\n\nScrivi la nuova data (formato: GG/MM/AAAA):`);
+            
+            setUserState(chatId, 'modifica_data', {eventoId: mieiEventi[num - 1].id, numeroEvento: num});
+            bot.sendMessage(chatId, `Modifica evento ${num}:\n${mieiEventi[num - 1].data} - ${mieiEventi[num - 1].ora}\n\nNuova data (GG/MM/AAAA):`);
             break;
 
         case 'modifica_data':
             if (!/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(text)) {
-                bot.sendMessage(chatId, 'Formato data non valido. Usa GG/MM/AAAA (es: 25/12/2024)');
+                bot.sendMessage(chatId, 'Formato non valido. Usa GG/MM/AAAA');
                 return;
             }
-
-            const eventoIndex = eventi.findIndex(e => e.id === userState.data.eventoId);
-            if (eventoIndex !== -1) {
-                const vecchiaData = eventi[eventoIndex].data;
-                eventi[eventoIndex].data = text;
-
-                resetUserState(chatId);
-                bot.sendMessage(chatId, `✅ Data modificata con successo!\n\n📅 Prima: ${vecchiaData}\n📅 Ora: ${text}\n\n🏢 Evento: ${eventi[eventoIndex].nomeLocale}`);
+            
+            const index = eventi.findIndex(e => e.id === userState.data.eventoId);
+            if (index !== -1) {
+                const vecchiaData = eventi[index].data;
+                eventi[index].data = text;
+                salvaBackup();
+                bot.sendMessage(chatId, `✅ Data modificata!\n📅 ${vecchiaData} → ${text}`);
             }
+            resetUserState(chatId);
             break;
 
         case 'cancella_selezione':
-            const mieiEventiCanc = eventi.filter(evento => evento.creatoDa === chatId);
-            const numeroEventoCanc = parseInt(text);
-
-            if (isNaN(numeroEventoCanc) || numeroEventoCanc < 1 || numeroEventoCanc > mieiEventiCanc.length) {
-                bot.sendMessage(chatId, `❌ Numero non valido. Scegli un numero da 1 a ${mieiEventiCanc.length}`);
+            const mieiEventiCanc = eventi.filter(e => e.creatoDa === chatId);
+            const numCanc = parseInt(text);
+            
+            if (isNaN(numCanc) || numCanc < 1 || numCanc > mieiEventiCanc.length) {
+                bot.sendMessage(chatId, `❌ Numero non valido (1-${mieiEventiCanc.length})`);
                 return;
             }
-
-            const eventoCanc = mieiEventiCanc[numeroEventoCanc - 1];
-
-            const keyboard = {
+            
+            const evento = mieiEventiCanc[numCanc - 1];
+            bot.sendMessage(chatId, `⚠️ Cancellare evento ${numCanc}?\n\n📅 ${evento.data} - ${evento.ora}\n🏢 ${evento.nomeLocale}\n\n⚠️ Azione irreversibile!`, {
                 reply_markup: {
                     inline_keyboard: [
-                        [{text: '✅ Sì, cancella', callback_data: `cancella_num_${numeroEventoCanc}`}],
+                        [{text: '✅ Sì, cancella', callback_data: `cancella_num_${numCanc}`}],
                         [{text: '❌ No, mantieni', callback_data: 'mantieni_evento'}]
                     ]
                 }
-            };
-
-            bot.sendMessage(chatId, `⚠️ Conferma cancellazione\n\nSei sicuro di voler cancellare l'evento N.${numeroEventoCanc}?\n\n📅 Data: ${eventoCanc.data} - ${eventoCanc.ora}\n🏢 Locale: ${eventoCanc.nomeLocale}\n\n⚠️ Attenzione: Questa azione non può essere annullata!`, keyboard);
+            });
             break;
     }
 });
 
+// 🔍 FUNZIONE RICERCA
 function cercaEventi(chatId, query) {
-    const queryUpper = query.toUpperCase();
-    let eventiTrovati = [];
-
+    const q = query.toUpperCase();
     pulisciEventiScaduti();
 
-    if (queryUpper === 'ROMA' || queryUpper === 'MI') {
-        eventiTrovati = eventi.filter(evento => {
-            if (queryUpper === 'ROMA') {
-                return evento.cittaProvincia === 'ROMA' || evento.cittaProvincia === 'RM' ||
-                    evento.cittaProvincia.includes('ROMA') ||
-                    ['ROMA NORD', 'ROMA CENTRO', 'ROMA SUD'].some(zona => evento.cittaProvincia.includes(zona));
-            } else if (queryUpper === 'MI') {
-                return evento.cittaProvincia === 'MI' ||
-                    evento.cittaProvincia.includes('MILANO') ||
-                    ['MILANO NORD', 'MILANO CENTRO', 'MILANO SUD'].some(zona => evento.cittaProvincia.includes(zona));
-            }
-            return false;
+    let trovati = [];
+    
+    if (q === 'ROMA' || q === 'MI') {
+        trovati = eventi.filter(e => {
+            if (q === 'ROMA') return e.cittaProvincia.includes('ROMA') || e.cittaProvincia === 'RM';
+            if (q === 'MI') return e.cittaProvincia.includes('MILANO') || e.cittaProvincia === 'MI';
         });
     } else {
-        eventiTrovati = eventi.filter(evento => {
-            return evento.cittaProvincia.includes(queryUpper) ||
-                evento.cittaProvincia === queryUpper;
-        });
+        trovati = eventi.filter(e => e.cittaProvincia.includes(q));
     }
 
-    if (eventiTrovati.length === 0) {
-        bot.sendMessage(chatId, `❌ Nessun evento trovato per "${query}".\n\nProva con:\n• Sigla provincia (es: MI, RM, TO, ROMA)\n• Nome città (es: Milano, Roma)\n• Zona specifica (es: Milano Nord, Roma Centro)`);
+    if (trovati.length === 0) {
+        bot.sendMessage(chatId, `❌ Nessun evento per "${query}"\n\nProva: MI, Roma, Torino, Milano Nord`);
         return;
     }
 
-    eventiTrovati.sort((a, b) => {
-        const parti_a = a.data.split('/');
-        const parti_b = b.data.split('/');
-        const dataA = new Date(parti_a[2], parti_a[1] - 1, parti_a[0]);
-        const dataB = new Date(parti_b[2], parti_b[1] - 1, parti_b[0]);
-        return dataA - dataB;
+    trovati.sort((a, b) => {
+        const [ga, ma, aa] = a.data.split('/');
+        const [gb, mb, ab] = b.data.split('/');
+        return new Date(aa, ma - 1, ga) - new Date(ab, mb - 1, gb);
     });
 
-    let messaggio = `🎭 Eventi trovati per "${query}":\n\n`;
+    let messaggio = `🎭 Eventi per "${query}" (${trovati.length}):\n\n`;
+    trovati.forEach((evento, i) => {
+        const categoria = categorieEventi[evento.categoria];
+        const tipo = evento.tipo === 'Gratuito' ? '🆓' : '💰';
+        messaggio += `${i + 1}. ${evento.data} - ${evento.ora}\n🎪 ${evento.titolo}\n🏢 ${evento.nomeLocale}\n📍 ${evento.cittaProvincia}\n🎤 Posti: ${evento.postiComici}\n${tipo} ${categoria.icona}\n\n`;
+    });
 
-    eventiTrovati.forEach((evento, index) => {
-        const tipoIcon = evento.tipo === 'Gratuito' ? '🆓' : '💰';
-        const categoriaInfo = categorieEventi[evento.categoria] || { nome: 'Non specificata', icona: '❓' };
+    bot.sendMessage(chatId, messaggio);
+}
 
-        
+// Gestione errori
+bot.on('error', (error) => console.error('❌ Bot error:', error));
+bot.on('polling_error', (error) => console.error('❌ Polling error:', error));
+
+// Avvio
+console.log(`🎭 Bot Comedy v.${VERSION} avviato!`);
+console.log('💾 Backup automatico attivo');
+console.log('🔐 Comandi admin nascosti');
+
+module.exports = bot;
