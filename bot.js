@@ -6,7 +6,7 @@ const path = require('path');
 const TOKEN = process.env.BOT_TOKEN;
 const ADMIN_ID = '827798574'; // Chat ID di @dinobronzi82
 const BACKUP_FILE = path.join(__dirname, 'comedy_backup.json');
-const VERSION = '22.6';
+const VERSION = '22.6.1';
 
 if (!TOKEN) {
     console.error('❌ ERRORE: BOT_TOKEN non trovato!');
@@ -70,7 +70,6 @@ function caricaBackup() {
 
 // Utility functions
 const isAdmin = (chatId) => chatId.toString() === ADMIN_ID;
-const isBanned = (chatId) => bannedUsers.includes(chatId.toString());
 const resetUserState = (chatId) => delete userStates[chatId];
 const setUserState = (chatId, state, data = {}) => {
     userStates[chatId] = { state, data, lastActivity: new Date() };
@@ -78,7 +77,8 @@ const setUserState = (chatId, state, data = {}) => {
 
 // 🚫 Controllo Ban
 function checkBan(chatId) {
-    if (isBanned(chatId)) {
+    const chatIdStr = chatId.toString();
+    if (bannedUsers.includes(chatIdStr)) {
         bot.sendMessage(chatId, '🚫 Sei stato escluso dall\'utilizzo del bot.\n\nPer informazioni: zibroncloud@gmail.com');
         return true;
     }
@@ -205,7 +205,7 @@ bot.onText(/\/ban (.+)/, (msg, match) => {
     const chatId = msg.chat.id;
     if (!isAdmin(chatId)) return;
     
-    const targetId = match[1].trim();
+    const targetId = match[1].trim().toString(); // Forza stringa
     
     if (bannedUsers.includes(targetId)) {
         bot.sendMessage(chatId, `⚠️ Utente ${targetId} già bannato`);
@@ -221,7 +221,7 @@ bot.onText(/\/unban (.+)/, (msg, match) => {
     const chatId = msg.chat.id;
     if (!isAdmin(chatId)) return;
     
-    const targetId = match[1].trim();
+    const targetId = match[1].trim().toString(); // Forza stringa
     const index = bannedUsers.indexOf(targetId);
     
     if (index === -1) {
@@ -297,7 +297,7 @@ bot.onText(/\/help/, (msg) => {
 📸 Novità v.22.6:
 • Locandine eventi (memorizzate su Telegram)
 • Limite 5 eventi/giorno per utente
-• Sistema antispam migliorato
+• Sistema antispam e ban migliorato
 
 ⚡ Note:
 • Eventi eliminati dopo 1 settimana
