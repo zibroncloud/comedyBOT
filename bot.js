@@ -6,7 +6,7 @@ const path = require('path');
 const TOKEN = process.env.BOT_TOKEN;
 const ADMIN_ID = '827798574'; // Chat ID di @dinobronzi82
 const BACKUP_FILE = path.join(__dirname, 'comedy_backup.json');
-const VERSION = '22.6.1';
+const VERSION = '22.6.2';
 
 if (!TOKEN) {
     console.error('❌ ERRORE: BOT_TOKEN non trovato!');
@@ -298,6 +298,7 @@ bot.onText(/\/help/, (msg) => {
 • Locandine eventi (memorizzate su Telegram)
 • Limite 5 eventi/giorno per utente
 • Sistema antispam e ban migliorato
+• ID utente visibile per moderazione
 
 ⚡ Note:
 • Eventi eliminati dopo 1 settimana
@@ -498,7 +499,9 @@ ${categoria.icona} ${categoria.nome}
 🏢 ${evento.nomeLocale}
 📍 ${evento.cittaProvincia}
 🎤 Posti: ${evento.postiComici}
-${evento.tipo === 'Gratuito' ? '🆓' : '💰'} ${evento.tipo}`);
+${evento.tipo === 'Gratuito' ? '🆓' : '💰'} ${evento.tipo}
+
+👤 ID: ${chatId}`);
             resetUserState(chatId);
         }
     } else if (data.startsWith('cancella_num_')) {
@@ -558,7 +561,9 @@ ${categoria.icona} ${categoria.nome}
 📍 ${evento.cittaProvincia}
 🎤 Posti: ${evento.postiComici}
 ${evento.tipo === 'Gratuito' ? '🆓' : '💰'} ${evento.tipo}
-📸 Locandina caricata!`);
+📸 Locandina caricata!
+
+👤 ID: ${chatId}`);
         resetUserState(chatId);
     } else {
         bot.sendMessage(chatId, '📸 Foto ricevuta!\n\nPer caricare locandine eventi, usa /crea');
@@ -679,7 +684,9 @@ ${categoria.icona} ${categoria.nome}
 🏢 ${evento.nomeLocale}
 📍 ${evento.cittaProvincia}
 🎤 Posti: ${evento.postiComici}
-${evento.tipo === 'Gratuito' ? '🆓' : '💰'} ${evento.tipo}`);
+${evento.tipo === 'Gratuito' ? '🆓' : '💰'} ${evento.tipo}
+
+👤 ID: ${chatId}`);
                 resetUserState(chatId);
             } else {
                 bot.sendMessage(chatId, '📸 Per aggiungere una locandina, invia una foto.\n\nOppure scrivi "skip" per saltare.');
@@ -799,5 +806,6 @@ console.log('💾 Backup automatico attivo');
 console.log('🔐 Comandi admin nascosti');
 console.log('📸 Sistema locandine attivo');
 console.log('🚫 Sistema ban attivo');
+console.log('🆔 ID utente automatico attivo');
 
 module.exports = bot;
