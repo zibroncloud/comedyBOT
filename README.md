@@ -1,4 +1,4 @@
-# 🎭 Comedy Bot Telegram v.22.4
+# 🎭 Comedy Bot Telegram v.26.4
 
 Bot Telegram per la gestione e ricerca di eventi di Stand-up Comedy in Italia.
 
