@@ -7,7 +7,7 @@ const TOKEN = process.env.BOT_TOKEN;
 const ADMIN_ID = '827798574'; // Chat ID di @dinobronzi82
 const CHANNEL_ID = '@OpenMicsITA'; // Canale per eventi
 const BACKUP_FILE = path.join(__dirname, 'comedy_backup.json');
-const VERSION = '22.8.1';
+const VERSION = '22.8.2';
 
 if (!TOKEN) {
     console.error('❌ ERRORE: BOT_TOKEN non trovato!');
@@ -765,8 +765,8 @@ bot.on('message', async (msg) => {
             }
             
             // Controllo validità data
-            const [giorno, mese, anno] = text.split('/').map(Number);
-            const dataEvento = new Date(anno, mese - 1, giorno);
+            const [g, m, a] = text.split('/').map(Number);
+            const dataEvento = new Date(a, m - 1, g);
             const oggi = new Date();
             oggi.setHours(0, 0, 0, 0); // Reset ore per confronto solo data
             
@@ -904,22 +904,22 @@ ${evento.tipo === 'Gratuito' ? '🆓' : '💰'} ${evento.tipo}
             }
             
             // Controllo validità data anche per modifiche
-            const [giorno, mese, anno] = text.split('/').map(Number);
-            const dataEvento = new Date(anno, mese - 1, giorno);
-            const oggi = new Date();
-            oggi.setHours(0, 0, 0, 0);
+            const [gg, mm, aa] = text.split('/').map(Number);
+            const dataEventoMod = new Date(aa, mm - 1, gg);
+            const oggiMod = new Date();
+            oggiMod.setHours(0, 0, 0, 0);
             
-            if (dataEvento < oggi) {
+            if (dataEventoMod < oggiMod) {
                 bot.sendMessage(chatId, '⚠️ Non puoi modificare con una data nel passato!\n\n📅 Inserisci una data da oggi in poi.');
                 return;
             }
             
-            const maxData = new Date();
-            maxData.setDate(maxData.getDate() + 77);
+            const maxDataMod = new Date();
+            maxDataMod.setDate(maxDataMod.getDate() + 77);
             
-            if (dataEvento > maxData) {
-                const maxDataStr = `${maxData.getDate().toString().padStart(2, '0')}/${(maxData.getMonth() + 1).toString().padStart(2, '0')}/${maxData.getFullYear()}`;
-                bot.sendMessage(chatId, `⚠️ Data troppo lontana!\n\n📅 Puoi modificare eventi fino al ${maxDataStr}\n(massimo 77 giorni da oggi)`);
+            if (dataEventoMod > maxDataMod) {
+                const maxDataModStr = `${maxDataMod.getDate().toString().padStart(2, '0')}/${(maxDataMod.getMonth() + 1).toString().padStart(2, '0')}/${maxDataMod.getFullYear()}`;
+                bot.sendMessage(chatId, `⚠️ Data troppo lontana!\n\n📅 Puoi modificare eventi fino al ${maxDataModStr}\n(massimo 77 giorni da oggi)`);
                 return;
             }
             
