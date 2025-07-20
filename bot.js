@@ -7,7 +7,7 @@ const TOKEN = process.env.BOT_TOKEN;
 const ADMIN_ID = '827798574'; // Chat ID di @dinobronzi82
 const CHANNEL_ID = '@OpenMicsITA'; // Canale per eventi
 const BACKUP_FILE = path.join(__dirname, 'comedy_backup.json');
-const VERSION = '22.8';
+const VERSION = '22.8.1';
 
 if (!TOKEN) {
     console.error('❌ ERRORE: BOT_TOKEN non trovato!');
@@ -438,18 +438,20 @@ bot.onText(/\/help/, (msg) => {
 🎪 Festival - Festival e rassegne
 📚 Corso/Workshop - Corsi e workshop
 
-📺 Novità v.22.7:
+📺 Novità v.22.8:
 • Tutti gli eventi pubblicati automaticamente su t.me/OpenMicsITA
 • Locandine eventi (memorizzate su Telegram)
 • Limite eventi giornaliero: 2 normali, 10 GOLDMember 🏆, 15 admin
 • Sistema antispam e ban migliorato
 • ID organizzatore visibile nelle ricerche
+• Date eventi: solo da oggi ai prossimi 77 giorni
 
 ⚡ Note:
 • Eventi eliminati dopo 1 settimana
 • Roma/Milano divise in 3 zone
 • /annulla per interrompere operazioni
 • Tutti gli eventi su: t.me/OpenMicsITA
+• Date valide: solo futuro, massimo 77 giorni
 
 📧 Per problemi, complimenti e suggerimenti:
 zibroncloud@gmail.com 😉`);
@@ -617,7 +619,7 @@ bot.on('callback_query', async (query) => {
             if (!userStates[chatId].data) userStates[chatId].data = {};
             userStates[chatId].data.categoria = categoria;
             setUserState(chatId, 'crea_data', userStates[chatId].data);
-            bot.sendMessage(chatId, 'Data evento (GG/MM/AAAA):\n\nEs: 25/12/2024');
+            bot.sendMessage(chatId, 'Data evento (GG/MM/AAAA):\n\nEs: 25/12/2024\n\n⚠️ Solo eventi da oggi ai prossimi 77 giorni');
         }
     } else if (data === 'tipo_gratuito' || data === 'tipo_pagamento') {
         if (userStates[chatId]?.data) {
@@ -761,6 +763,29 @@ bot.on('message', async (msg) => {
                 bot.sendMessage(chatId, 'Formato non valido. Usa GG/MM/AAAA');
                 return;
             }
+            
+            // Controllo validità data
+            const [giorno, mese, anno] = text.split('/').map(Number);
+            const dataEvento = new Date(anno, mese - 1, giorno);
+            const oggi = new Date();
+            oggi.setHours(0, 0, 0, 0); // Reset ore per confronto solo data
+            
+            // Controllo data nel passato
+            if (dataEvento < oggi) {
+                bot.sendMessage(chatId, '⚠️ Non puoi creare eventi nel passato!\n\n📅 Inserisci una data da oggi in poi.');
+                return;
+            }
+            
+            // Controllo data troppo lontana (77 giorni nel futuro)
+            const maxData = new Date();
+            maxData.setDate(maxData.getDate() + 77);
+            
+            if (dataEvento > maxData) {
+                const maxDataStr = `${maxData.getDate().toString().padStart(2, '0')}/${(maxData.getMonth() + 1).toString().padStart(2, '0')}/${maxData.getFullYear()}`;
+                bot.sendMessage(chatId, `⚠️ Data troppo lontana!\n\n📅 Puoi creare eventi fino al ${maxDataStr}\n(massimo 77 giorni da oggi)`);
+                return;
+            }
+            
             userState.data.data = text;
             setUserState(chatId, 'crea_ora', userState.data);
             bot.sendMessage(chatId, 'Ora evento (HH:MM):\n\nEs: 21:30');
@@ -878,6 +903,26 @@ ${evento.tipo === 'Gratuito' ? '🆓' : '💰'} ${evento.tipo}
                 return;
             }
             
+            // Controllo validità data anche per modifiche
+            const [giorno, mese, anno] = text.split('/').map(Number);
+            const dataEvento = new Date(anno, mese - 1, giorno);
+            const oggi = new Date();
+            oggi.setHours(0, 0, 0, 0);
+            
+            if (dataEvento < oggi) {
+                bot.sendMessage(chatId, '⚠️ Non puoi modificare con una data nel passato!\n\n📅 Inserisci una data da oggi in poi.');
+                return;
+            }
+            
+            const maxData = new Date();
+            maxData.setDate(maxData.getDate() + 77);
+            
+            if (dataEvento > maxData) {
+                const maxDataStr = `${maxData.getDate().toString().padStart(2, '0')}/${(maxData.getMonth() + 1).toString().padStart(2, '0')}/${maxData.getFullYear()}`;
+                bot.sendMessage(chatId, `⚠️ Data troppo lontana!\n\n📅 Puoi modificare eventi fino al ${maxDataStr}\n(massimo 77 giorni da oggi)`);
+                return;
+            }
+            
             const index = eventi.findIndex(e => e.id === userState.data.eventoId);
             if (index !== -1) {
                 const vecchiaData = eventi[index].data;
@@ -975,6 +1020,7 @@ console.log('📸 Sistema locandine attivo');
 console.log('🚫 Sistema ban attivo');
 console.log('🏆 Sistema GOLDMember attivo');
 console.log('🕺🏻 Sistema SUPERadmin attivo');
+console.log('📅 Controllo date eventi attivo (oggi + 77 giorni)');
 console.log('📺 Canale t.me/OpenMicsITA collegato');
 
 module.exports = bot;
