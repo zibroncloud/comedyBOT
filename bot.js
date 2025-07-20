@@ -5,14 +5,13 @@ const path = require('path');
 // Configurazione
 const TOKEN = process.env.BOT_TOKEN;
 const ADMIN_ID = '827798574'; // Chat ID di @dinobronzi82
-const CHANNEL_ID = '@OpenMicsITA'; // Canale per eventi
 const BACKUP_FILE = path.join(__dirname, 'comedy_backup.json');
-const VERSION = '22.6.4';
+const VERSION = '22.6.3';
 
 if (!TOKEN) {
     console.error('❌ ERRORE: BOT_TOKEN non trovato!');
     process.exit(1);
-// Utility functions
+}
 
 const bot = new TelegramBot(TOKEN, {polling: true});
 
@@ -69,42 +68,7 @@ function caricaBackup() {
     }
 }
 
-// 📺 FUNZIONE POSTING CANALE
-async function postToChannel(evento) {
-    try {
-        const categoria = categorieEventi[evento.categoria];
-        const tipo = evento.tipo === 'Gratuito' ? '🆓' : '💰';
-        
-        const messaggioCanale = `🎭 NUOVO EVENTO COMEDY!
-
-${categoria.icona} ${categoria.nome}
-📅 ${evento.data} - ${evento.ora}
-🎪 ${evento.titolo}
-🏢 ${evento.nomeLocale}
-${evento.indirizzoVia ? `📍 ${evento.indirizzoVia}` : ''}
-📍 ${evento.cittaProvincia}
-🎤 Posti disponibili: ${evento.postiComici}
-${evento.organizzatoreInfo ? `👨‍🎤 Organizzatore: ${evento.organizzatoreInfo}` : ''}
-${tipo} ${categoria.nome}
-
-@OpenMicsBot per più info!`;
-
-        if (evento.locandina) {
-            await bot.sendPhoto(CHANNEL_ID, evento.locandina, { 
-                caption: messaggioCanale
-            });
-        } else {
-            await bot.sendMessage(CHANNEL_ID, messaggioCanale);
-        }
-        
-        console.log(`📺 Evento postato nel canale: ${evento.titolo}`);
-        return true;
-    } catch (error) {
-        console.error(`❌ Errore posting canale: ${error.message}`);
-        // NON bloccare la creazione evento se canale fallisce
-        return false;
-    }
-}
+// Utility functions
 const isAdmin = (chatId) => chatId.toString() === ADMIN_ID;
 const resetUserState = (chatId) => delete userStates[chatId];
 const setUserState = (chatId, state, data = {}) => {
@@ -481,7 +445,7 @@ bot.onText(/\/annulla/, (msg) => {
 });
 
 // 🎯 GESTIONE CALLBACK
-bot.on('callback_query', async (query) => {
+bot.on('callback_query', (query) => {
     const chatId = query.message.chat.id;
     const data = query.data;
     
@@ -526,9 +490,6 @@ bot.on('callback_query', async (query) => {
             trackUserActivity(chatId, 'crea_evento');
             salvaBackup();
 
-            // Posta nel canale (TEMPORANEAMENTE DISABILITATO)
-            // await postToChannel(evento);
-
             const categoria = categorieEventi[evento.categoria];
             bot.sendMessage(chatId, `🎉 Evento creato con successo!
 
@@ -564,7 +525,7 @@ ${evento.tipo === 'Gratuito' ? '🆓' : '💰'} ${evento.tipo}`);
 });
 
 // 📸 GESTIONE FOTO
-bot.on('photo', async (msg) => {
+bot.on('photo', (msg) => {
     const chatId = msg.chat.id;
     
     if (checkBan(chatId)) return;
@@ -588,9 +549,6 @@ bot.on('photo', async (msg) => {
         trackUserActivity(chatId, 'crea_evento');
         salvaBackup();
 
-        // Posta nel canale (TEMPORANEAMENTE DISABILITATO)
-        // await postToChannel(evento);
-
         const categoria = categorieEventi[evento.categoria];
         bot.sendMessage(chatId, `🎉 Evento creato con locandina!
 
@@ -609,7 +567,7 @@ ${evento.tipo === 'Gratuito' ? '🆓' : '💰'} ${evento.tipo}
 });
 
 // 📝 GESTIONE MESSAGGI
-bot.on('message', async (msg) => {
+bot.on('message', (msg) => {
     const chatId = msg.chat.id;
     const text = msg.text;
 
@@ -712,9 +670,6 @@ bot.on('message', async (msg) => {
                 eventi.push(evento);
                 trackUserActivity(chatId, 'crea_evento');
                 salvaBackup();
-
-                // Posta nel canale (TEMPORANEAMENTE DISABILITATO)
-                // await postToChannel(evento);
 
                 const categoria = categorieEventi[evento.categoria];
                 bot.sendMessage(chatId, `🎉 Evento creato con successo!
