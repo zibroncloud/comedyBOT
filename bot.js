@@ -7,7 +7,7 @@ const TOKEN = process.env.BOT_TOKEN;
 const ADMIN_ID = '827798574'; // Chat ID di @dinobronzi82
 const CHANNEL_ID = '@OpenMicsITA'; // Canale per eventi
 const BACKUP_FILE = path.join(__dirname, 'comedy_backup.json');
-const VERSION = '22.7';
+const VERSION = '22.7.1';
 
 if (!TOKEN) {
     console.error('❌ ERRORE: BOT_TOKEN non trovato!');
@@ -126,6 +126,7 @@ function checkBan(chatId) {
 // ⚠️ Controllo Limite Eventi Giornaliero
 function checkDailyLimit(chatId) {
     const oggi = new Date().toDateString();
+    const limiteEventi = isAdmin(chatId) ? 15 : 2; // Admin: 15, Utenti: 2
     
     if (!userStats[chatId]) {
         userStats[chatId] = {
@@ -144,8 +145,8 @@ function checkDailyLimit(chatId) {
         userStats[chatId].ultimaData = oggi;
     }
     
-    if (userStats[chatId].eventiOggi >= 5) {
-        bot.sendMessage(chatId, '⚠️ Limite giornaliero raggiunto!\n\n🚫 Puoi creare massimo 5 eventi al giorno.\n⏰ Riprova domani.\n\n📧 Per necessità particolari: zibroncloud@gmail.com');
+    if (userStats[chatId].eventiOggi >= limiteEventi) {
+        bot.sendMessage(chatId, `⚠️ Limite giornaliero raggiunto!\n\n🚫 Puoi creare massimo ${limiteEventi} eventi al giorno.\n⏰ Riprova domani.\n\n📧 Per necessità particolari: zibroncloud@gmail.com`);
         return false;
     }
     
@@ -296,6 +297,8 @@ bot.onText(/\/start/, (msg) => {
     bot.sendMessage(chatId, `🎭 Bot Standup Comedy v.${VERSION} 🎤
 da @dinobronzi82 - Eventi comedy in Italia!
 
+⚠️ Bot in fase di test - versione stabile prevista per Settembre
+
 🎯 Comandi:
 /cerca - Cerca eventi per provincia
 /crea - Crea nuovo evento
@@ -336,7 +339,7 @@ bot.onText(/\/help/, (msg) => {
 📺 Novità v.22.7:
 • Tutti gli eventi pubblicati automaticamente su @OpenMicsITA
 • Locandine eventi (memorizzate su Telegram)
-• Limite 5 eventi/giorno per utente
+• Limite eventi giornaliero: 2 per utenti, 15 per admin
 • Sistema antispam e ban migliorato
 • ID organizzatore visibile nelle ricerche
 
@@ -406,7 +409,8 @@ bot.onText(/\/miei_eventi/, (msg) => {
 
     const oggi = new Date().toDateString();
     const eventiOggi = userStats[chatId]?.eventiOggi || 0;
-    messaggio += `📊 Eventi creati oggi: ${eventiOggi}/5`;
+    const limiteEventi = isAdmin(chatId) ? 15 : 2;
+    messaggio += `📊 Eventi creati oggi: ${eventiOggi}/${limiteEventi}`;
 
     bot.sendMessage(chatId, messaggio);
 });
