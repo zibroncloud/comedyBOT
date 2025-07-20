@@ -7,7 +7,7 @@ const TOKEN = process.env.BOT_TOKEN;
 const ADMIN_ID = '827798574'; // Chat ID di @dinobronzi82
 const CHANNEL_ID = '@OpenMicsITA'; // Canale per eventi
 const BACKUP_FILE = path.join(__dirname, 'comedy_backup.json');
-const VERSION = '22.7.1';
+const VERSION = '22.8';
 
 if (!TOKEN) {
     console.error('❌ ERRORE: BOT_TOKEN non trovato!');
@@ -20,6 +20,8 @@ const bot = new TelegramBot(TOKEN, {polling: true});
 let eventi = [];
 let userStats = {};
 let bannedUsers = []; // Lista utenti bannati
+let goldMembers = []; // Lista GOLDMember 🏆
+let superAdmins = []; // Lista SUPERadmin 🕺🏻
 const userStates = {};
 
 // Categorie eventi
@@ -35,7 +37,9 @@ function salvaBackup() {
         const backup = { 
             eventi, 
             userStats, 
-            bannedUsers, 
+            bannedUsers,
+            goldMembers,
+            superAdmins, 
             timestamp: new Date().toISOString(), 
             version: VERSION 
         };
@@ -55,7 +59,9 @@ function caricaBackup() {
             eventi = backup.eventi || [];
             userStats = backup.userStats || {};
             bannedUsers = backup.bannedUsers || [];
-            console.log(`✅ Backup caricato: ${eventi.length} eventi, ${Object.keys(userStats).length} utenti, ${bannedUsers.length} ban`);
+            goldMembers = backup.goldMembers || [];
+            superAdmins = backup.superAdmins || [];
+            console.log(`✅ Backup caricato: ${eventi.length} eventi, ${Object.keys(userStats).length} utenti, ${bannedUsers.length} ban, ${goldMembers.length} gold, ${superAdmins.length} super`);
             return true;
         }
         console.log('📝 Nessun backup trovato');
@@ -65,12 +71,17 @@ function caricaBackup() {
         eventi = [];
         userStats = {};
         bannedUsers = [];
+        goldMembers = [];
+        superAdmins = [];
         return false;
     }
 }
 
 // Utility functions
 const isAdmin = (chatId) => chatId.toString() === ADMIN_ID;
+const isSuperAdmin = (chatId) => superAdmins.includes(chatId.toString());
+const isGoldMember = (chatId) => goldMembers.includes(chatId.toString());
+const hasAdminPowers = (chatId) => isAdmin(chatId) || isSuperAdmin(chatId);
 const resetUserState = (chatId) => delete userStates[chatId];
 const setUserState = (chatId, state, data = {}) => {
     userStates[chatId] = { state, data, lastActivity: new Date() };
@@ -126,7 +137,16 @@ function checkBan(chatId) {
 // ⚠️ Controllo Limite Eventi Giornaliero
 function checkDailyLimit(chatId) {
     const oggi = new Date().toDateString();
-    const limiteEventi = isAdmin(chatId) ? 15 : 2; // Admin: 15, Utenti: 2
+    
+    // Determinare limite in base al livello utente
+    let limiteEventi;
+    if (hasAdminPowers(chatId)) {
+        limiteEventi = 15; // Admin e SuperAdmin
+    } else if (isGoldMember(chatId)) {
+        limiteEventi = 10; // GOLDMember 🏆
+    } else {
+        limiteEventi = 2; // Utenti normali
+    }
     
     if (!userStats[chatId]) {
         userStats[chatId] = {
@@ -211,17 +231,17 @@ process.on('SIGTERM', () => { salvaBackup(); process.exit(0); });
 // 🔐 COMANDI ADMIN (nascosti)
 bot.onText(/\/backup/, (msg) => {
     const chatId = msg.chat.id;
-    if (!isAdmin(chatId)) return;
+    if (!hasAdminPowers(chatId)) return;
     
     const success = salvaBackup();
     bot.sendMessage(chatId, success ? 
-        `✅ Backup salvato!\n📊 ${eventi.length} eventi, ${Object.keys(userStats).length} utenti, ${bannedUsers.length} ban` : 
+        `✅ Backup salvato!\n📊 ${eventi.length} eventi, ${Object.keys(userStats).length} utenti, ${bannedUsers.length} ban, ${goldMembers.length} gold, ${superAdmins.length} super` : 
         '❌ Errore backup!');
 });
 
 bot.onText(/\/stats/, (msg) => {
     const chatId = msg.chat.id;
-    if (!isAdmin(chatId)) return;
+    if (!hasAdminPowers(chatId)) return;
     
     const eventiAttivi = eventi.filter(e => {
         const [g, m, a] = e.data.split('/');
@@ -235,16 +255,30 @@ bot.onText(/\/stats/, (msg) => {
 🎭 Eventi: ${eventi.length} (${eventiAttivi.length} attivi)
 👥 Utenti: ${Object.keys(userStats).length}
 🚫 Utenti bannati: ${bannedUsers.length}
+🏆 GOLDMember: ${goldMembers.length}
+🕺🏻 SUPERadmin: ${superAdmins.length}
 📈 Oggi: ${eventiOggi.length} nuovi eventi
 💾 Backup: ${new Date().toLocaleString()}`);
 });
 
-// 🚫 COMANDI BAN (solo admin)
+// 🚫 COMANDI BAN (solo admin e super admin)
 bot.onText(/\/ban (.+)/, (msg, match) => {
     const chatId = msg.chat.id;
-    if (!isAdmin(chatId)) return;
+    if (!hasAdminPowers(chatId)) return;
     
-    const targetId = match[1].trim().toString(); // Forza stringa
+    const targetId = match[1].trim().toString();
+    
+    // Protezione: non si può bannare l'admin principale
+    if (targetId === ADMIN_ID) {
+        bot.sendMessage(chatId, '🛡️ Non puoi bannare l\'admin principale!');
+        return;
+    }
+    
+    // Super admin non possono bannare altri super admin (solo l'admin principale può)
+    if (isSuperAdmin(targetId) && !isAdmin(chatId)) {
+        bot.sendMessage(chatId, '🛡️ Solo l\'admin principale può bannare altri SUPERadmin!');
+        return;
+    }
     
     if (bannedUsers.includes(targetId)) {
         bot.sendMessage(chatId, `⚠️ Utente ${targetId} già bannato`);
@@ -258,9 +292,9 @@ bot.onText(/\/ban (.+)/, (msg, match) => {
 
 bot.onText(/\/unban (.+)/, (msg, match) => {
     const chatId = msg.chat.id;
-    if (!isAdmin(chatId)) return;
+    if (!hasAdminPowers(chatId)) return;
     
-    const targetId = match[1].trim().toString(); // Forza stringa
+    const targetId = match[1].trim().toString();
     const index = bannedUsers.indexOf(targetId);
     
     if (index === -1) {
@@ -275,7 +309,7 @@ bot.onText(/\/unban (.+)/, (msg, match) => {
 
 bot.onText(/\/banlist/, (msg) => {
     const chatId = msg.chat.id;
-    if (!isAdmin(chatId)) return;
+    if (!hasAdminPowers(chatId)) return;
     
     if (bannedUsers.length === 0) {
         bot.sendMessage(chatId, '📋 Nessun utente bannato');
@@ -284,6 +318,74 @@ bot.onText(/\/banlist/, (msg) => {
     
     const lista = bannedUsers.map((id, i) => `${i + 1}. ${id}`).join('\n');
     bot.sendMessage(chatId, `🚫 Utenti bannati (${bannedUsers.length}):\n\n${lista}`);
+});
+
+// 🏆 COMANDI GOLDMEMBER (solo admin e super admin)
+bot.onText(/\/gold (.+)/, (msg, match) => {
+    const chatId = msg.chat.id;
+    if (!hasAdminPowers(chatId)) return;
+    
+    const targetId = match[1].trim().toString();
+    
+    if (goldMembers.includes(targetId)) {
+        bot.sendMessage(chatId, `⚠️ Utente ${targetId} già GOLDMember 🏆`);
+        return;
+    }
+    
+    goldMembers.push(targetId);
+    salvaBackup();
+    bot.sendMessage(chatId, `🏆 Utente ${targetId} promosso a GOLDMember!\n\n📋 Totale GOLD: ${goldMembers.length}`);
+});
+
+bot.onText(/\/ungold (.+)/, (msg, match) => {
+    const chatId = msg.chat.id;
+    if (!hasAdminPowers(chatId)) return;
+    
+    const targetId = match[1].trim().toString();
+    const index = goldMembers.indexOf(targetId);
+    
+    if (index === -1) {
+        bot.sendMessage(chatId, `⚠️ Utente ${targetId} non è GOLDMember`);
+        return;
+    }
+    
+    goldMembers.splice(index, 1);
+    salvaBackup();
+    bot.sendMessage(chatId, `✅ Utente ${targetId} rimosso da GOLDMember!\n\n📋 Totale GOLD: ${goldMembers.length}`);
+});
+
+// 🕺🏻 COMANDI SUPERADMIN (solo admin principale)
+bot.onText(/\/addsuper (.+)/, (msg, match) => {
+    const chatId = msg.chat.id;
+    if (!isAdmin(chatId)) return; // Solo l'admin principale può nominare SuperAdmin
+    
+    const targetId = match[1].trim().toString();
+    
+    if (superAdmins.includes(targetId)) {
+        bot.sendMessage(chatId, `⚠️ Utente ${targetId} già SUPERadmin 🕺🏻`);
+        return;
+    }
+    
+    superAdmins.push(targetId);
+    salvaBackup();
+    bot.sendMessage(chatId, `🕺🏻 Utente ${targetId} promosso a SUPERadmin!\n\n📋 Totale SUPER: ${superAdmins.length}`);
+});
+
+bot.onText(/\/removesuper (.+)/, (msg, match) => {
+    const chatId = msg.chat.id;
+    if (!isAdmin(chatId)) return; // Solo l'admin principale può rimuovere SuperAdmin
+    
+    const targetId = match[1].trim().toString();
+    const index = superAdmins.indexOf(targetId);
+    
+    if (index === -1) {
+        bot.sendMessage(chatId, `⚠️ Utente ${targetId} non è SUPERadmin`);
+        return;
+    }
+    
+    superAdmins.splice(index, 1);
+    salvaBackup();
+    bot.sendMessage(chatId, `✅ Utente ${targetId} rimosso da SUPERadmin!\n\n📋 Totale SUPER: ${superAdmins.length}`);
 });
 
 // 📱 COMANDI PUBBLICI
@@ -311,7 +413,7 @@ da @dinobronzi82 - Eventi comedy in Italia!
 
 🎪 Categorie: 🎤 Serata • 🎪 Festival • 📚 Workshop
 📸 Nuova funzione: Locandine eventi!
-📺 Tutti gli eventi su: @OpenMicsITA
+📺 Tutti gli eventi su: t.me/OpenMicsITA
 🚀 Sempre online 24/7 con backup automatico!
 
 📧 Per problemi, complimenti e suggerimenti:
@@ -337,9 +439,9 @@ bot.onText(/\/help/, (msg) => {
 📚 Corso/Workshop - Corsi e workshop
 
 📺 Novità v.22.7:
-• Tutti gli eventi pubblicati automaticamente su @OpenMicsITA
+• Tutti gli eventi pubblicati automaticamente su t.me/OpenMicsITA
 • Locandine eventi (memorizzate su Telegram)
-• Limite eventi giornaliero: 2 per utenti, 15 per admin
+• Limite eventi giornaliero: 2 normali, 10 GOLDMember 🏆, 15 admin
 • Sistema antispam e ban migliorato
 • ID organizzatore visibile nelle ricerche
 
@@ -347,6 +449,7 @@ bot.onText(/\/help/, (msg) => {
 • Eventi eliminati dopo 1 settimana
 • Roma/Milano divise in 3 zone
 • /annulla per interrompere operazioni
+• Tutti gli eventi su: t.me/OpenMicsITA
 
 📧 Per problemi, complimenti e suggerimenti:
 zibroncloud@gmail.com 😉`);
@@ -409,7 +512,17 @@ bot.onText(/\/miei_eventi/, (msg) => {
 
     const oggi = new Date().toDateString();
     const eventiOggi = userStats[chatId]?.eventiOggi || 0;
-    const limiteEventi = isAdmin(chatId) ? 15 : 2;
+    
+    // Determinare limite in base al livello utente
+    let limiteEventi;
+    if (hasAdminPowers(chatId)) {
+        limiteEventi = 15;
+    } else if (isGoldMember(chatId)) {
+        limiteEventi = 10;
+    } else {
+        limiteEventi = 2;
+    }
+    
     messaggio += `📊 Eventi creati oggi: ${eventiOggi}/${limiteEventi}`;
 
     bot.sendMessage(chatId, messaggio);
@@ -860,6 +973,8 @@ console.log('💾 Backup automatico attivo');
 console.log('🔐 Comandi admin nascosti');
 console.log('📸 Sistema locandine attivo');
 console.log('🚫 Sistema ban attivo');
-console.log('📺 Canale @OpenMicsITA collegato');
+console.log('🏆 Sistema GOLDMember attivo');
+console.log('🕺🏻 Sistema SUPERadmin attivo');
+console.log('📺 Canale t.me/OpenMicsITA collegato');
 
 module.exports = bot;
