@@ -7,7 +7,7 @@ const TOKEN = process.env.BOT_TOKEN;
 const ADMIN_ID = '827798574'; // Chat ID di @dinobronzi82
 const CHANNEL_ID = '@OpenMicsITA'; // Canale per eventi
 const BACKUP_FILE = path.join(__dirname, 'comedy_backup.json');
-const VERSION = '22.7';
+const VERSION = '22.7.1';
 
 if (!TOKEN) {
     console.error('❌ ERRORE: BOT_TOKEN non trovato!');
@@ -483,7 +483,7 @@ bot.onText(/\/annulla/, (msg) => {
 });
 
 // 🎯 GESTIONE CALLBACK
-bot.on('callback_query', (query) => {
+bot.on('callback_query', async (query) => {
     const chatId = query.message.chat.id;
     const data = query.data;
     
@@ -568,7 +568,7 @@ ${evento.tipo === 'Gratuito' ? '🆓' : '💰'} ${evento.tipo}
 });
 
 // 📸 GESTIONE FOTO
-bot.on('photo', (msg) => {
+bot.on('photo', async (msg) => {
     const chatId = msg.chat.id;
     
     if (checkBan(chatId)) return;
@@ -615,7 +615,7 @@ ${evento.tipo === 'Gratuito' ? '🆓' : '💰'} ${evento.tipo}
 });
 
 // 📝 GESTIONE MESSAGGI
-bot.on('message', (msg) => {
+bot.on('message', async (msg) => {
     const chatId = msg.chat.id;
     const text = msg.text;
 
