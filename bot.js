@@ -7,7 +7,7 @@ const TOKEN = process.env.BOT_TOKEN;
 const ADMIN_ID = '827798574'; // Chat ID di @dinobronzi82
 const CHANNEL_ID = '@OpenMicsITA'; // Canale per eventi
 const BACKUP_FILE = path.join(__dirname, 'comedy_backup.json');
-const VERSION = '22.7.1';
+const VERSION = '22.6.4';
 
 if (!TOKEN) {
     console.error('❌ ERRORE: BOT_TOKEN non trovato!');
@@ -91,8 +91,7 @@ ${tipo} ${categoria.nome}
 
         if (evento.locandina) {
             await bot.sendPhoto(CHANNEL_ID, evento.locandina, { 
-                caption: messaggioCanale,
-                parse_mode: 'HTML'
+                caption: messaggioCanale
             });
         } else {
             await bot.sendMessage(CHANNEL_ID, messaggioCanale);
@@ -102,6 +101,7 @@ ${tipo} ${categoria.nome}
         return true;
     } catch (error) {
         console.error(`❌ Errore posting canale: ${error.message}`);
+        // NON bloccare la creazione evento se canale fallisce
         return false;
     }
 }
@@ -306,7 +306,6 @@ da @dinobronzi82 - Eventi comedy in Italia!
 
 🎪 Categorie: 🎤 Serata • 🎪 Festival • 📚 Workshop
 📸 Nuova funzione: Locandine eventi!
-📺 Tutti gli eventi su: @OpenMicsITA
 🚀 Sempre online 24/7 con backup automatico!
 
 📧 Per problemi, complimenti e suggerimenti:
@@ -331,8 +330,7 @@ bot.onText(/\/help/, (msg) => {
 🎪 Festival - Festival e rassegne
 📚 Corso/Workshop - Corsi e workshop
 
-📺 Novità v.22.7:
-• Tutti gli eventi pubblicati su @OpenMicsITA
+📸 Novità v.22.6:
 • Locandine eventi (memorizzate su Telegram)
 • Limite 5 eventi/giorno per utente
 • Sistema antispam e ban migliorato
@@ -528,8 +526,8 @@ bot.on('callback_query', async (query) => {
             trackUserActivity(chatId, 'crea_evento');
             salvaBackup();
 
-            // Posta nel canale
-            await postToChannel(evento);
+            // Posta nel canale (TEMPORANEAMENTE DISABILITATO)
+            // await postToChannel(evento);
 
             const categoria = categorieEventi[evento.categoria];
             bot.sendMessage(chatId, `🎉 Evento creato con successo!
@@ -540,9 +538,7 @@ ${categoria.icona} ${categoria.nome}
 🏢 ${evento.nomeLocale}
 📍 ${evento.cittaProvincia}
 🎤 Posti: ${evento.postiComici}
-${evento.tipo === 'Gratuito' ? '🆓' : '💰'} ${evento.tipo}
-
-📺 Pubblicato su @OpenMicsITA!`);
+${evento.tipo === 'Gratuito' ? '🆓' : '💰'} ${evento.tipo}`);
             resetUserState(chatId);
         }
     } else if (data.startsWith('cancella_num_')) {
@@ -592,8 +588,8 @@ bot.on('photo', async (msg) => {
         trackUserActivity(chatId, 'crea_evento');
         salvaBackup();
 
-        // Posta nel canale
-        await postToChannel(evento);
+        // Posta nel canale (TEMPORANEAMENTE DISABILITATO)
+        // await postToChannel(evento);
 
         const categoria = categorieEventi[evento.categoria];
         bot.sendMessage(chatId, `🎉 Evento creato con locandina!
@@ -605,9 +601,7 @@ ${categoria.icona} ${categoria.nome}
 📍 ${evento.cittaProvincia}
 🎤 Posti: ${evento.postiComici}
 ${evento.tipo === 'Gratuito' ? '🆓' : '💰'} ${evento.tipo}
-📸 Locandina caricata!
-
-📺 Pubblicato su @OpenMicsITA!`);
+📸 Locandina caricata!`);
         resetUserState(chatId);
     } else {
         bot.sendMessage(chatId, '📸 Foto ricevuta!\n\nPer caricare locandine eventi, usa /crea');
@@ -719,8 +713,8 @@ bot.on('message', async (msg) => {
                 trackUserActivity(chatId, 'crea_evento');
                 salvaBackup();
 
-                // Posta nel canale
-                await postToChannel(evento);
+                // Posta nel canale (TEMPORANEAMENTE DISABILITATO)
+                // await postToChannel(evento);
 
                 const categoria = categorieEventi[evento.categoria];
                 bot.sendMessage(chatId, `🎉 Evento creato con successo!
@@ -731,9 +725,7 @@ ${categoria.icona} ${categoria.nome}
 🏢 ${evento.nomeLocale}
 📍 ${evento.cittaProvincia}
 🎤 Posti: ${evento.postiComici}
-${evento.tipo === 'Gratuito' ? '🆓' : '💰'} ${evento.tipo}
-
-📺 Pubblicato su @OpenMicsITA!`);
+${evento.tipo === 'Gratuito' ? '🆓' : '💰'} ${evento.tipo}`);
                 resetUserState(chatId);
             } else {
                 bot.sendMessage(chatId, '📸 Per aggiungere una locandina, invia una foto.\n\nOppure scrivi "skip" per saltare.');
@@ -854,6 +846,5 @@ console.log('💾 Backup automatico attivo');
 console.log('🔐 Comandi admin nascosti');
 console.log('📸 Sistema locandine attivo');
 console.log('🚫 Sistema ban attivo');
-console.log('📺 Canale @OpenMicsITA collegato');
 
 module.exports = bot;
