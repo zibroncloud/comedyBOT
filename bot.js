@@ -7,7 +7,7 @@ const TOKEN = process.env.BOT_TOKEN;
 const ADMIN_ID = '827798574'; // Chat ID di @dinobronzi82
 const CHANNEL_ID = '@OpenMicsITA'; // Canale per eventi
 const BACKUP_FILE = path.join(__dirname, 'comedy_backup.json');
-const VERSION = '23.0';
+const VERSION = '22.8.2';
 
 if (!TOKEN) {
     console.error('❌ ERRORE: BOT_TOKEN non trovato!');
@@ -28,8 +28,7 @@ const userStates = {};
 const categorieEventi = {
     'S': { nome: 'Serata Stand-up', icona: '🎤' },
     'F': { nome: 'Festival', icona: '🎪' },
-    'W': { nome: 'Corso/Workshop', icona: '📚' },
-    'P': { nome: 'Podcast', icona: '🎙️' }
+    'W': { nome: 'Corso/Workshop', icona: '📚' }
 };
 
 // 🗄️ SISTEMA BACKUP
@@ -92,23 +91,9 @@ const setUserState = (chatId, state, data = {}) => {
 async function postToChannel(evento) {
     try {
         const categoria = categorieEventi[evento.categoria];
+        const tipo = evento.tipo === 'Gratuito' ? '🆓' : '💰';
         
-        let messaggioCanale;
-        
-        // Messaggio specifico per podcast
-        if (evento.categoria === 'P') {
-            messaggioCanale = `🎙️ NUOVO PODCAST!
-
-🎙️ ${categoria.nome}
-🎪 ${evento.titolo}
-🔗 ${evento.linkPodcast}
-
-@OpenMicsBot per caricare i tuoi eventi!`;
-        } else {
-            // Messaggio per altri eventi
-            const tipo = evento.tipo === 'Gratuito' ? '🆓' : '💰';
-            
-            messaggioCanale = `🎭 NUOVO EVENTO COMEDY!
+        const messaggioCanale = `🎭 NUOVO EVENTO COMEDY!
 
 ${categoria.icona} ${categoria.nome}
 📅 ${evento.data} - ${evento.ora}
@@ -120,8 +105,7 @@ ${evento.indirizzoVia ? `📍 ${evento.indirizzoVia}` : ''}
 ${evento.organizzatoreInfo ? `👨‍🎤 Organizzatore: ${evento.organizzatoreInfo}` : ''}
 ${tipo} ${categoria.nome}
 
-@OpenMicsBot per caricare i tuoi eventi!`;
-        }
+@OpenMicsBot per più info!`;
 
         if (evento.locandina) {
             await bot.sendPhoto(CHANNEL_ID, evento.locandina, { 
@@ -216,9 +200,6 @@ function pulisciEventiScaduti() {
     const unaSettimanaFa = new Date(Date.now() - (7 * 24 * 60 * 60 * 1000));
     const eventiPrima = eventi.length;
     eventi = eventi.filter(evento => {
-        // I podcast non scadono mai (non hanno data)
-        if (evento.categoria === 'P') return true;
-        
         const [g, m, a] = evento.data.split('/');
         return new Date(a, m - 1, g) >= unaSettimanaFa;
     });
@@ -263,7 +244,6 @@ bot.onText(/\/stats/, (msg) => {
     if (!hasAdminPowers(chatId)) return;
     
     const eventiAttivi = eventi.filter(e => {
-        if (e.categoria === 'P') return true; // I podcast sono sempre attivi
         const [g, m, a] = e.data.split('/');
         return new Date(a, m - 1, g) >= new Date();
     });
@@ -431,7 +411,7 @@ da @dinobronzi82 - Eventi comedy in Italia!
 /donazioni - Sostieni il progetto
 /help - Guida completa
 
-🎪 Categorie: 🎤 Serata • 🎪 Festival • 📚 Workshop • 🎙️ Podcast
+🎪 Categorie: 🎤 Serata • 🎪 Festival • 📚 Workshop
 📸 Nuova funzione: Locandine eventi!
 📺 Tutti gli eventi su: t.me/OpenMicsITA
 🚀 Sempre online 24/7 con backup automatico!
@@ -457,10 +437,8 @@ bot.onText(/\/help/, (msg) => {
 🎤 Serata Stand-up - Serate comedy
 🎪 Festival - Festival e rassegne
 📚 Corso/Workshop - Corsi e workshop
-🎙️ Podcast - Podcast comedy
 
-📺 Novità v.23.0:
-• Nuova categoria Podcast 🎙️
+📺 Novità v.22.8:
 • Tutti gli eventi pubblicati automaticamente su t.me/OpenMicsITA
 • Locandine eventi (memorizzate su Telegram)
 • Limite eventi giornaliero: 2 normali, 10 GOLDMember 🏆, 15 admin
@@ -469,7 +447,7 @@ bot.onText(/\/help/, (msg) => {
 • Date eventi: solo da oggi ai prossimi 77 giorni
 
 ⚡ Note:
-• Eventi eliminati dopo 1 settimana (Podcast sempre visibili)
+• Eventi eliminati dopo 1 settimana
 • Roma/Milano divise in 3 zone
 • /annulla per interrompere operazioni
 • Tutti gli eventi su: t.me/OpenMicsITA
@@ -503,8 +481,7 @@ bot.onText(/\/crea/, (msg) => {
             inline_keyboard: [
                 [{text: '🎤 Serata Stand-up', callback_data: 'categoria_S'}],
                 [{text: '🎪 Festival', callback_data: 'categoria_F'}],
-                [{text: '📚 Corso/Workshop', callback_data: 'categoria_W'}],
-                [{text: '🎙️ Podcast', callback_data: 'categoria_P'}]
+                [{text: '📚 Corso/Workshop', callback_data: 'categoria_W'}]
             ]
         }
     });
@@ -518,11 +495,6 @@ bot.onText(/\/miei_eventi/, (msg) => {
     pulisciEventiScaduti();
 
     const mieiEventi = eventi.filter(e => e.creatoDa === chatId).sort((a, b) => {
-        // I podcast vengono mostrati per primi, poi gli altri per data
-        if (a.categoria === 'P' && b.categoria !== 'P') return -1;
-        if (a.categoria !== 'P' && b.categoria === 'P') return 1;
-        if (a.categoria === 'P' && b.categoria === 'P') return 0;
-        
         const [ga, ma, aa] = a.data.split('/');
         const [gb, mb, ab] = b.data.split('/');
         return new Date(aa, ma - 1, ga) - new Date(ab, mb - 1, gb);
@@ -537,12 +509,7 @@ bot.onText(/\/miei_eventi/, (msg) => {
     mieiEventi.forEach((evento, i) => {
         const categoria = categorieEventi[evento.categoria];
         const fotoIcon = evento.locandina ? '📸' : '';
-        
-        if (evento.categoria === 'P') {
-            messaggio += `${i + 1}. 🎙️ PODCAST ${fotoIcon}\n🎪 ${evento.titolo}\n🔗 ${evento.linkPodcast}\n${categoria.icona} ${categoria.nome}\n\n`;
-        } else {
-            messaggio += `${i + 1}. ${evento.data} - ${evento.ora} ${fotoIcon}\n🎪 ${evento.titolo}\n🏢 ${evento.nomeLocale}\n📍 ${evento.cittaProvincia}\n${categoria.icona} ${categoria.nome}\n\n`;
-        }
+        messaggio += `${i + 1}. ${evento.data} - ${evento.ora} ${fotoIcon}\n🎪 ${evento.titolo}\n🏢 ${evento.nomeLocale}\n📍 ${evento.cittaProvincia}\n${categoria.icona} ${categoria.nome}\n\n`;
     });
 
     const oggi = new Date().toDateString();
@@ -580,14 +547,9 @@ bot.onText(/\/ultimi/, (msg) => {
     let messaggio = `🆕 Ultimi ${ultimi.length} eventi:\n\n`;
     ultimi.forEach((evento, i) => {
         const categoria = categorieEventi[evento.categoria];
+        const tipo = evento.tipo === 'Gratuito' ? '🆓' : '💰';
         const fotoIcon = evento.locandina ? '📸' : '';
-        
-        if (evento.categoria === 'P') {
-            messaggio += `${i + 1}. 🎙️ PODCAST ${fotoIcon}\n🎪 ${evento.titolo}\n🔗 ${evento.linkPodcast}\n🎙️\n\n`;
-        } else {
-            const tipo = evento.tipo === 'Gratuito' ? '🆓' : '💰';
-            messaggio += `${i + 1}. ${evento.data} - ${evento.ora} ${fotoIcon}\n🎪 ${evento.titolo}\n🏢 ${evento.nomeLocale}\n📍 ${evento.cittaProvincia}\n${tipo} ${categoria.icona}\n\n`;
-        }
+        messaggio += `${i + 1}. ${evento.data} - ${evento.ora} ${fotoIcon}\n🎪 ${evento.titolo}\n🏢 ${evento.nomeLocale}\n📍 ${evento.cittaProvincia}\n${tipo} ${categoria.icona}\n\n`;
     });
 
     bot.sendMessage(chatId, messaggio);
@@ -606,7 +568,7 @@ bot.onText(/\/modifica_evento/, (msg) => {
     }
 
     setUserState(chatId, 'modifica_selezione');
-    bot.sendMessage(chatId, 'Numero evento da modificare (1,2,3...):\n\nUsa /miei_eventi per la lista\n\n⚠️ Solo eventi con data possono essere modificati (non podcast)');
+    bot.sendMessage(chatId, 'Numero evento da modificare (1,2,3...):\n\nUsa /miei_eventi per la lista');
 });
 
 bot.onText(/\/cancella_evento/, (msg) => {
@@ -656,13 +618,409 @@ bot.on('callback_query', async (query) => {
         if (userStates[chatId]) {
             if (!userStates[chatId].data) userStates[chatId].data = {};
             userStates[chatId].data.categoria = categoria;
+            setUserState(chatId, 'crea_data', userStates[chatId].data);
+            bot.sendMessage(chatId, 'Data evento (GG/MM/AAAA):\n\nEs: 25/12/2024\n\n⚠️ Solo eventi da oggi ai prossimi 77 giorni');
+        }
+    } else if (data === 'tipo_gratuito' || data === 'tipo_pagamento') {
+        if (userStates[chatId]?.data) {
+            const evento = userStates[chatId].data;
+            evento.tipo = data === 'tipo_gratuito' ? 'Gratuito' : 'A pagamento';
+            setUserState(chatId, 'crea_locandina', evento);
             
-            // Se è un podcast, chiedi direttamente il titolo
-            if (categoria === 'P') {
-                setUserState(chatId, 'crea_titolo_podcast', userStates[chatId].data);
-                bot.sendMessage(chatId, 'Titolo del podcast:\n\nEs: "Comedy Podcast", "Parlando di Comedy"');
-            } else {
-                // Per altri eventi, continua con la data
-                setUserState(chatId, 'crea_data', userStates[chatId].data);
-                bot.sendMessage(chatId, 'Data evento (GG/MM/AAAA):\n\nEs: 25/12/2024\n\n⚠️ Solo eventi da oggi ai prossimi 77 giorni');
+            bot.sendMessage(chatId, '📸 Vuoi aggiungere una locandina?\n\n📷 Invia una foto oppure scrivi "skip" per saltare', {
+                reply_markup: {
+                    inline_keyboard: [
+                        [{text: '⏭️ Salta locandina', callback_data: 'skip_locandina'}]
+                    ]
+                }
+            });
+        }
+    } else if (data === 'skip_locandina') {
+        if (userStates[chatId]?.data) {
+            const evento = userStates[chatId].data;
+            evento.locandina = null;
+            
+            // Finalizza evento
+            evento.id = Date.now() + Math.random();
+            evento.dataCreazione = new Date();
+            evento.creatoDa = chatId;
+
+            eventi.push(evento);
+            trackUserActivity(chatId, 'crea_evento');
+            salvaBackup();
+
+            // Posta nel canale
+            await postToChannel(evento);
+
+            const categoria = categorieEventi[evento.categoria];
+            bot.sendMessage(chatId, `🎉 Evento creato con successo!
+
+${categoria.icona} ${categoria.nome}
+📅 ${evento.data} - ${evento.ora}
+🎪 ${evento.titolo}
+🏢 ${evento.nomeLocale}
+📍 ${evento.cittaProvincia}
+🎤 Posti: ${evento.postiComici}
+${evento.tipo === 'Gratuito' ? '🆓' : '💰'} ${evento.tipo}
+
+📺 Pubblicato su @OpenMicsITA!`);
+            resetUserState(chatId);
+        }
+    } else if (data.startsWith('cancella_num_')) {
+        const num = parseInt(data.split('_')[2]);
+        const mieiEventi = eventi.filter(e => e.creatoDa === chatId);
+        const evento = mieiEventi[num - 1];
+
+        if (evento) {
+            const index = eventi.findIndex(e => e.id === evento.id);
+            if (index !== -1) {
+                eventi.splice(index, 1);
+                salvaBackup();
             }
+            bot.sendMessage(chatId, `✅ Evento cancellato!\n📅 ${evento.data} - ${evento.nomeLocale}`);
+            resetUserState(chatId);
+        }
+    } else if (data === 'mantieni_evento') {
+        resetUserState(chatId);
+        bot.sendMessage(chatId, '✅ Evento mantenuto.');
+    }
+
+    bot.answerCallbackQuery(query.id);
+});
+
+// 📸 GESTIONE FOTO
+bot.on('photo', async (msg) => {
+    const chatId = msg.chat.id;
+    
+    if (checkBan(chatId)) return;
+    
+    const userState = userStates[chatId];
+    
+    if (userState?.state === 'crea_locandina') {
+        // Prendi la foto di qualità migliore
+        const photo = msg.photo[msg.photo.length - 1];
+        
+        // Salva file_id della foto (per ora semplice)
+        userState.data.locandina = photo.file_id;
+        
+        // Finalizza evento
+        const evento = userState.data;
+        evento.id = Date.now() + Math.random();
+        evento.dataCreazione = new Date();
+        evento.creatoDa = chatId;
+
+        eventi.push(evento);
+        trackUserActivity(chatId, 'crea_evento');
+        salvaBackup();
+
+        // Posta nel canale
+        await postToChannel(evento);
+
+        const categoria = categorieEventi[evento.categoria];
+        bot.sendMessage(chatId, `🎉 Evento creato con locandina!
+
+${categoria.icona} ${categoria.nome}
+📅 ${evento.data} - ${evento.ora}
+🎪 ${evento.titolo}
+🏢 ${evento.nomeLocale}
+📍 ${evento.cittaProvincia}
+🎤 Posti: ${evento.postiComici}
+${evento.tipo === 'Gratuito' ? '🆓' : '💰'} ${evento.tipo}
+📸 Locandina caricata!
+
+📺 Pubblicato su @OpenMicsITA!`);
+        resetUserState(chatId);
+    } else {
+        bot.sendMessage(chatId, '📸 Foto ricevuta!\n\nPer caricare locandine eventi, usa /crea');
+    }
+});
+
+// 📝 GESTIONE MESSAGGI
+bot.on('message', async (msg) => {
+    const chatId = msg.chat.id;
+    const text = msg.text;
+
+    if (!text || text.startsWith('/') || msg.photo) return;
+    if (checkBan(chatId)) return;
+
+    const userState = userStates[chatId];
+    
+    if (!userState) {
+        cercaEventi(chatId, text);
+        return;
+    }
+
+    userState.lastActivity = new Date();
+
+    switch (userState.state) {
+        case 'cerca':
+            resetUserState(chatId);
+            cercaEventi(chatId, text);
+            break;
+
+        case 'crea_data':
+            if (!/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(text)) {
+                bot.sendMessage(chatId, 'Formato non valido. Usa GG/MM/AAAA');
+                return;
+            }
+            
+            // Controllo validità data
+            const [g, m, a] = text.split('/').map(Number);
+            const dataEvento = new Date(a, m - 1, g);
+            const oggi = new Date();
+            oggi.setHours(0, 0, 0, 0); // Reset ore per confronto solo data
+            
+            // Controllo data nel passato
+            if (dataEvento < oggi) {
+                bot.sendMessage(chatId, '⚠️ Non puoi creare eventi nel passato!\n\n📅 Inserisci una data da oggi in poi.');
+                return;
+            }
+            
+            // Controllo data troppo lontana (77 giorni nel futuro)
+            const maxData = new Date();
+            maxData.setDate(maxData.getDate() + 77);
+            
+            if (dataEvento > maxData) {
+                const maxDataStr = `${maxData.getDate().toString().padStart(2, '0')}/${(maxData.getMonth() + 1).toString().padStart(2, '0')}/${maxData.getFullYear()}`;
+                bot.sendMessage(chatId, `⚠️ Data troppo lontana!\n\n📅 Puoi creare eventi fino al ${maxDataStr}\n(massimo 77 giorni da oggi)`);
+                return;
+            }
+            
+            userState.data.data = text;
+            setUserState(chatId, 'crea_ora', userState.data);
+            bot.sendMessage(chatId, 'Ora evento (HH:MM):\n\nEs: 21:30');
+            break;
+
+        case 'crea_ora':
+            if (!/^\d{1,2}:\d{2}$/.test(text)) {
+                bot.sendMessage(chatId, 'Formato non valido. Usa HH:MM');
+                return;
+            }
+            userState.data.ora = text;
+            setUserState(chatId, 'crea_titolo', userState.data);
+            bot.sendMessage(chatId, 'Titolo serata:\n\nEs: "Comedy Night", "Open Mic"');
+            break;
+
+        case 'crea_titolo':
+            userState.data.titolo = text;
+            setUserState(chatId, 'crea_nome_locale', userState.data);
+            bot.sendMessage(chatId, 'Nome locale/teatro:');
+            break;
+
+        case 'crea_nome_locale':
+            userState.data.nomeLocale = text;
+            setUserState(chatId, 'crea_indirizzo_via', userState.data);
+            bot.sendMessage(chatId, 'Indirizzo (scrivi "skip" per saltare):');
+            break;
+
+        case 'crea_indirizzo_via':
+            userState.data.indirizzoVia = text.toLowerCase() === 'skip' ? '' : text.trim();
+            setUserState(chatId, 'crea_citta_provincia', userState.data);
+            bot.sendMessage(chatId, 'Città e provincia:\n\nEs: Milano, MI - Roma Centro, RM');
+            break;
+
+        case 'crea_citta_provincia':
+            userState.data.cittaProvincia = text.toUpperCase();
+            setUserState(chatId, 'crea_posti', userState.data);
+            bot.sendMessage(chatId, 'Posti comici disponibili (solo numero):');
+            break;
+
+        case 'crea_posti':
+            if (!/^\d+$/.test(text)) {
+                bot.sendMessage(chatId, 'Inserisci solo un numero');
+                return;
+            }
+            userState.data.postiComici = parseInt(text);
+            setUserState(chatId, 'crea_organizzatore', userState.data);
+            bot.sendMessage(chatId, 'Organizzatore/MC ("skip" per saltare):');
+            break;
+
+        case 'crea_organizzatore':
+            userState.data.organizzatoreInfo = text.toLowerCase() === 'skip' ? '' : text.trim();
+            setUserState(chatId, 'crea_tipo', userState.data);
+            
+            bot.sendMessage(chatId, 'Evento gratuito o a pagamento?', {
+                reply_markup: {
+                    inline_keyboard: [
+                        [{text: '🆓 Gratuito', callback_data: 'tipo_gratuito'}],
+                        [{text: '💰 A pagamento', callback_data: 'tipo_pagamento'}]
+                    ]
+                }
+            });
+            break;
+
+        case 'crea_locandina':
+            if (text.toLowerCase() === 'skip') {
+                const evento = userState.data;
+                evento.locandina = null;
+                
+                // Finalizza evento
+                evento.id = Date.now() + Math.random();
+                evento.dataCreazione = new Date();
+                evento.creatoDa = chatId;
+
+                eventi.push(evento);
+                trackUserActivity(chatId, 'crea_evento');
+                salvaBackup();
+
+                // Posta nel canale
+                await postToChannel(evento);
+
+                const categoria = categorieEventi[evento.categoria];
+                bot.sendMessage(chatId, `🎉 Evento creato con successo!
+
+${categoria.icona} ${categoria.nome}
+📅 ${evento.data} - ${evento.ora}
+🎪 ${evento.titolo}
+🏢 ${evento.nomeLocale}
+📍 ${evento.cittaProvincia}
+🎤 Posti: ${evento.postiComici}
+${evento.tipo === 'Gratuito' ? '🆓' : '💰'} ${evento.tipo}
+
+📺 Pubblicato su @OpenMicsITA!`);
+                resetUserState(chatId);
+            } else {
+                bot.sendMessage(chatId, '📸 Per aggiungere una locandina, invia una foto.\n\nOppure scrivi "skip" per saltare.');
+            }
+            break;
+
+        case 'modifica_selezione':
+            const mieiEventi = eventi.filter(e => e.creatoDa === chatId);
+            const num = parseInt(text);
+            
+            if (isNaN(num) || num < 1 || num > mieiEventi.length) {
+                bot.sendMessage(chatId, `❌ Numero non valido (1-${mieiEventi.length})`);
+                return;
+            }
+            
+            setUserState(chatId, 'modifica_data', {eventoId: mieiEventi[num - 1].id, numeroEvento: num});
+            bot.sendMessage(chatId, `Modifica evento ${num}:\n${mieiEventi[num - 1].data} - ${mieiEventi[num - 1].ora}\n\nNuova data (GG/MM/AAAA):`);
+            break;
+
+        case 'modifica_data':
+            if (!/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(text)) {
+                bot.sendMessage(chatId, 'Formato non valido. Usa GG/MM/AAAA');
+                return;
+            }
+            
+            // Controllo validità data anche per modifiche
+            const [gg, mm, aa] = text.split('/').map(Number);
+            const dataEventoMod = new Date(aa, mm - 1, gg);
+            const oggiMod = new Date();
+            oggiMod.setHours(0, 0, 0, 0);
+            
+            if (dataEventoMod < oggiMod) {
+                bot.sendMessage(chatId, '⚠️ Non puoi modificare con una data nel passato!\n\n📅 Inserisci una data da oggi in poi.');
+                return;
+            }
+            
+            const maxDataMod = new Date();
+            maxDataMod.setDate(maxDataMod.getDate() + 77);
+            
+            if (dataEventoMod > maxDataMod) {
+                const maxDataModStr = `${maxDataMod.getDate().toString().padStart(2, '0')}/${(maxDataMod.getMonth() + 1).toString().padStart(2, '0')}/${maxDataMod.getFullYear()}`;
+                bot.sendMessage(chatId, `⚠️ Data troppo lontana!\n\n📅 Puoi modificare eventi fino al ${maxDataModStr}\n(massimo 77 giorni da oggi)`);
+                return;
+            }
+            
+            const index = eventi.findIndex(e => e.id === userState.data.eventoId);
+            if (index !== -1) {
+                const vecchiaData = eventi[index].data;
+                eventi[index].data = text;
+                salvaBackup();
+                bot.sendMessage(chatId, `✅ Data modificata!\n📅 ${vecchiaData} → ${text}`);
+            }
+            resetUserState(chatId);
+            break;
+
+        case 'cancella_selezione':
+            const mieiEventiCanc = eventi.filter(e => e.creatoDa === chatId);
+            const numCanc = parseInt(text);
+            
+            if (isNaN(numCanc) || numCanc < 1 || numCanc > mieiEventiCanc.length) {
+                bot.sendMessage(chatId, `❌ Numero non valido (1-${mieiEventiCanc.length})`);
+                return;
+            }
+            
+            const evento = mieiEventiCanc[numCanc - 1];
+            bot.sendMessage(chatId, `⚠️ Cancellare evento ${numCanc}?\n\n📅 ${evento.data} - ${evento.ora}\n🏢 ${evento.nomeLocale}\n\n⚠️ Azione irreversibile!`, {
+                reply_markup: {
+                    inline_keyboard: [
+                        [{text: '✅ Sì, cancella', callback_data: `cancella_num_${numCanc}`}],
+                        [{text: '❌ No, mantieni', callback_data: 'mantieni_evento'}]
+                    ]
+                }
+            });
+            break;
+    }
+});
+
+// 🔍 FUNZIONE RICERCA
+function cercaEventi(chatId, query) {
+    const q = query.toUpperCase();
+    pulisciEventiScaduti();
+
+    let trovati = [];
+    
+    if (q === 'ROMA' || q === 'MI') {
+        trovati = eventi.filter(e => {
+            if (q === 'ROMA') return e.cittaProvincia.includes('ROMA') || e.cittaProvincia === 'RM';
+            if (q === 'MI') return e.cittaProvincia.includes('MILANO') || e.cittaProvincia === 'MI';
+        });
+    } else {
+        trovati = eventi.filter(e => e.cittaProvincia.includes(q));
+    }
+
+    if (trovati.length === 0) {
+        bot.sendMessage(chatId, `❌ Nessun evento per "${query}"\n\nProva: MI, Roma, Torino, Milano Nord`);
+        return;
+    }
+
+    trovati.sort((a, b) => {
+        const [ga, ma, aa] = a.data.split('/');
+        const [gb, mb, ab] = b.data.split('/');
+        return new Date(aa, ma - 1, ga) - new Date(ab, mb - 1, gb);
+    });
+
+    // Invia eventi uno per uno se hanno locandina
+    trovati.forEach((evento, i) => {
+        const categoria = categorieEventi[evento.categoria];
+        const tipo = evento.tipo === 'Gratuito' ? '🆓' : '💰';
+        
+        const messaggio = `${i + 1}. ${evento.data} - ${evento.ora}
+🎪 ${evento.titolo}
+🏢 ${evento.nomeLocale}
+📍 ${evento.cittaProvincia}
+🎤 Posti: ${evento.postiComici}
+${tipo} ${categoria.icona}
+👤 ID: ${evento.creatoDa}`;
+
+        if (evento.locandina) {
+            bot.sendPhoto(chatId, evento.locandina, { caption: messaggio });
+        } else {
+            bot.sendMessage(chatId, messaggio);
+        }
+    });
+
+    // Messaggio finale
+    setTimeout(() => {
+        bot.sendMessage(chatId, `📊 Trovati ${trovati.length} eventi per "${query}"`);
+    }, 1000);
+}
+
+// Gestione errori
+bot.on('error', (error) => console.error('❌ Bot error:', error));
+bot.on('polling_error', (error) => console.error('❌ Polling error:', error));
+
+// Avvio
+console.log(`🎭 Bot Comedy v.${VERSION} avviato!`);
+console.log('💾 Backup automatico attivo');
+console.log('🔐 Comandi admin nascosti');
+console.log('📸 Sistema locandine attivo');
+console.log('🚫 Sistema ban attivo');
+console.log('🏆 Sistema GOLDMember attivo');
+console.log('🕺🏻 Sistema SUPERadmin attivo');
+console.log('📅 Controllo date eventi attivo (oggi + 77 giorni)');
+console.log('📺 Canale t.me/OpenMicsITA collegato');
+
+module.exports = bot;
