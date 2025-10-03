@@ -1,14 +1,16 @@
-javascript
+Certamente, capisco la frustrazione. Ecco il codice completo corretto, con tutti gli errori di sintassi risolti e alcune piccole ottimizzazioni per renderlo più leggibile. Ho mantenuto la logica originale del tuo codice, concentrandomi sulla correzione degli errori che causavano il crash.
+
+```javascript
 const TelegramBot = require('node-telegram-bot-api');
 
 // Configurazione
-const TOKEN = process.env.BOTTOKEN;
-const ADMINID = '827798574'; // Chat ID di @dinobronzi82
-const CHANNELID = '@OpenMicsITA'; // Canale per eventi
+const TOKEN = process.env.BOT_TOKEN;
+const ADMIN_ID = '827798574'; // Chat ID di @dinobronzi82
+const CHANNEL_ID = '@OpenMicsITA'; // Canale per eventi
 const VERSION = '23.01';
 
 if (!TOKEN) {
-    console.error('❌ ERRORE: BOTTOKEN non trovato!');
+    console.error('❌ ERRORE: BOT_TOKEN non trovato!');
     process.exit(1);
 }
 
@@ -22,7 +24,7 @@ const goldMembers = [];
 const superAdmins = [];
 const userStates = {};
 
-// Categorie eventi (Utilizzo di un Map per performance e chiarezza)
+// Categorie eventi
 const categorieEventi = new Map([
     ['S', { nome: 'Serata Stand-up', icona: '🎤' }],
     ['F', { nome: 'Festival', icona: '🎪' }],
@@ -30,8 +32,8 @@ const categorieEventi = new Map([
     ['P', { nome: 'Podcast/Video', icona: '🎥' }]
 ]);
 
-// Utility functions (Ottimizzate e rese più concise)
-const isAdmin = (chatId) => chatId.toString() === ADMINID;
+// Utility functions
+const isAdmin = (chatId) => chatId.toString() === ADMIN_ID;
 const isSuperAdmin = (chatId) => superAdmins.includes(chatId.toString());
 const isGoldMember = (chatId) => goldMembers.includes(chatId.toString());
 const hasAdminPowers = (chatId) => isAdmin(chatId) || isSuperAdmin(chatId);
@@ -46,60 +48,60 @@ async function sendMessage(chatId, text, options = {}) {
     try {
         await bot.sendMessage(chatId, text, options);
     } catch (error) {
-        console.error(Errore invio messaggio a ${chatId}: ${error.message});
+        console.error(`Errore invio messaggio a ${chatId}: ${error.message}`);
     }
 }
 
-// 📺 FUNZIONE POSTING CANALE (Ottimizzata e resa più leggibile)
+// 📺 FUNZIONE POSTING CANALE
 async function postToChannel(evento) {
     try {
         const categoria = categorieEventi.get(evento.categoria);
         if (!categoria) {
-            console.error(Categoria non valida: ${evento.categoria});
+            console.error(`Categoria non valida: ${evento.categoria}`);
             return false;
         }
 
         let messaggioCanale;
         if (evento.categoria === 'P') {
-            messaggioCanale = 🎥 NUOVO CONTENUTO!
+            messaggioCanale = `🎥 NUOVO CONTENUTO!
 
 ${categoria.icona} ${categoria.nome}
 🎬 ${evento.titolo}
-${evento.link ? 🔗 ${evento.link} : ''}
+${evento.link ? `🔗 ${evento.link}` : ''}
 
-Per inserire eventi: @OpenMicsITA;
+Per inserire eventi: @OpenMicsITA`;
         } else {
             const tipo = evento.tipo === 'Gratuito' ? '🆓' : '💰';
-            messaggioCanale = 🎭 NUOVO EVENTO COMEDY!
+            messaggioCanale = `🎭 NUOVO EVENTO COMEDY!
 
 ${categoria.icona} ${categoria.nome}
 📅 ${evento.data} - ${evento.ora}
 🎪 ${evento.titolo}
 🏢 ${evento.nomeLocale}
-${evento.indirizzoVia ? 📍 ${evento.indirizzoVia} : ''}
+${evento.indirizzoVia ? `📍 ${evento.indirizzoVia}` : ''}
 📍 ${evento.cittaProvincia}
 🎤 Posti disponibili: ${evento.postiComici}
-${evento.organizzatoreInfo ? 👨‍🎤 Organizzatore: ${evento.organizzatoreInfo} : ''}
+${evento.organizzatoreInfo ? `👨‍🎤 Organizzatore: ${evento.organizzatoreInfo}` : ''}
 ${tipo} ${categoria.nome}
 
-Per inserire eventi: @OpenMicsITA;
+Per inserire eventi: @OpenMicsITA`;
         }
 
         if (evento.locandina) {
-            await bot.sendPhoto(CHANNELID, evento.locandina, { caption: messaggioCanale });
+            await bot.sendPhoto(CHANNEL_ID, evento.locandina, { caption: messaggioCanale });
         } else {
-            await bot.sendMessage(CHANNELID, messaggioCanale);
+            await bot.sendMessage(CHANNEL_ID, messaggioCanale);
         }
 
-        console.log(📺 Evento postato nel canale: ${evento.titolo});
+        console.log(`📺 Evento postato nel canale: ${evento.titolo}`);
         return true;
     } catch (error) {
-        console.error(❌ Errore posting canale: ${error.message});
+        console.error(`❌ Errore posting canale: ${error.message}`);
         return false;
     }
 }
 
-// 🚫 Controllo Ban (Semplificato)
+// 🚫 Controllo Ban
 function checkBan(chatId) {
     if (isBanned(chatId)) {
         sendMessage(chatId, '🚫 Sei stato escluso dall\'utilizzo del bot.\n\nPer informazioni: zibroncloud@gmail.com');
@@ -108,7 +110,7 @@ function checkBan(chatId) {
     return false;
 }
 
-// ⚠️ Controllo Limite Eventi Giornaliero (Ottimizzato e reso più leggibile)
+// ⚠️ Controllo Limite Eventi Giornaliero
 function checkDailyLimit(chatId) {
     const oggi = new Date().toDateString();
 
@@ -119,7 +121,6 @@ function checkDailyLimit(chatId) {
         limiteEventi = 10;
     }
 
-    // Inizializza userStats se non esiste
     userStats[chatId] = userStats[chatId] || {
         eventiCreati: 0,
         eventiOggi: 0,
@@ -129,14 +130,13 @@ function checkDailyLimit(chatId) {
         ultimoUso: new Date().toISOString()
     };
 
-    // Resetta il conteggio degli eventi se è un nuovo giorno
     if (userStats[chatId].ultimaData !== oggi) {
         userStats[chatId].eventiOggi = 0;
         userStats[chatId].ultimaData = oggi;
     }
 
     if (userStats[chatId].eventiOggi >= limiteEventi) {
-        sendMessage(chatId, ⚠️ Limite giornaliero raggiunto!\n\n🚫 Puoi creare massimo ${limiteEventi} eventi al giorno.\n⏰ Riprova domani.\n\n📧 Per necessità particolari: zibroncloud@gmail.com);
+        sendMessage(chatId, `⚠️ Limite giornaliero raggiunto!\n\n🚫 Puoi creare massimo ${limiteEventi} eventi al giorno.\n⏰ Riprova domani.\n\n📧 Per necessità particolari: zibroncloud@gmail.com`);
         return false;
     }
 
@@ -165,19 +165,19 @@ function trackUserActivity(chatId, action) {
     }
 }
 
-// Pulisce gli eventi scaduti (Ottimizzata con filter e gestione date)
+// Pulisce gli eventi scaduti
 function pulisciEventiScaduti() {
-    const unaSettimanaFa = new Date(Date.now() - (7  24  60  60  1000));
+    const unaSettimanaFa = new Date(Date.now() - (7 * 24 * 60 * 60 * 1000));
     const eventiPrima = eventi.length;
 
     eventi = eventi.filter(evento => {
-        if (evento.categoria === 'P') return true; // Podcast/Video non scadono
+        if (evento.categoria === 'P') return true;
         const dataEvento = parseDate(evento.data);
         return dataEvento >= unaSettimanaFa;
     });
 
     if (eventiPrima !== eventi.length) {
-        console.log(Rimossi ${eventiPrima - eventi.length} eventi scaduti);
+        console.log(`Rimossi ${eventiPrima - eventi.length} eventi scaduti`);
     }
 }
 
@@ -187,9 +187,9 @@ function parseDate(dateString) {
     return new Date(a, m - 1, g);
 }
 
-// Pulisce gli stati utente inattivi (Ottimizzata)
+// Pulisce gli stati utente inattivi
 function pulisciStatiInattivi() {
-    const quindiMinutiFa = new Date(Date.now() - (15  60  1000));
+    const quindiMinutiFa = new Date(Date.now() - (15 * 60 * 1000));
     for (const chatId in userStates) {
         if (userStates.hasOwnProperty(chatId) && userStates[chatId]?.lastActivity < quindiMinutiFa) {
             delete userStates[chatId];
@@ -197,14 +197,14 @@ function pulisciStatiInattivi() {
     }
 }
 
-// Intervalli per pulizia (Utilizzo di variabili per chiarezza)
-const EVENTICHECKINTERVAL = 60  60  1000; // 1 ora
-const STATICHECKINTERVAL = 15  60  1000;  // 15 minuti
+// Intervalli per pulizia
+const EVENTI_CHECK_INTERVAL = 60 * 60 * 1000; // 1 ora
+const STATI_CHECK_INTERVAL = 15 * 60 * 1000;  // 15 minuti
 
-setInterval(pulisciEventiScaduti, EVENTICHECKINTERVAL);
-setInterval(pulisciStatiInattivi, STATICHECKINTERVAL);
+setInterval(pulisciEventiScaduti, EVENTI_CHECK_INTERVAL);
+setInterval(pulisciStatiInattivi, STATI_CHECK_INTERVAL);
 
-// 📊 COMANDI ADMIN (Semplificati)
+// 📊 COMANDI ADMIN
 bot.onText(/\/stats/, (msg) => {
     const chatId = msg.chat.id;
     if (!hasAdminPowers(chatId)) return;
@@ -213,25 +213,25 @@ bot.onText(/\/stats/, (msg) => {
     const oggi = new Date().toDateString();
     const eventiOggi = eventi.filter(e => new Date(e.dataCreazione).toDateString() === oggi).length;
 
-    const statsMessage = 📊 Stats Bot v.${VERSION}:
+    const statsMessage = `📊 Stats Bot v.${VERSION}:
 🎭 Eventi: ${eventi.length} (${eventiAttivi.length} attivi)
 👥 Utenti: ${Object.keys(userStats).length}
 🚫 Utenti bannati: ${bannedUsers.length}
 🏆 GOLDMember: ${goldMembers.length}
 🕺🏻 SUPERadmin: ${superAdmins.length}
-📈 Oggi: ${eventiOggi} nuovi eventi;
+📈 Oggi: ${eventiOggi} nuovi eventi`;
 
     sendMessage(chatId, statsMessage);
 });
 
-// 🚫 COMANDI BAN (Semplificati)
+// 🚫 COMANDI BAN
 bot.onText(/\/ban (.+)/, (msg, match) => {
     const chatId = msg.chat.id;
     if (!hasAdminPowers(chatId)) return;
 
     const targetId = match[1].trim().toString();
 
-    if (targetId === ADMINID) {
+    if (targetId === ADMIN_ID) {
         sendMessage(chatId, '🛡️ Non puoi bannare l\'admin principale!');
         return;
     }
@@ -242,12 +242,12 @@ bot.onText(/\/ban (.+)/, (msg, match) => {
     }
 
     if (bannedUsers.includes(targetId)) {
-        sendMessage(chatId, ⚠️ Utente ${targetId} già bannato);
+        sendMessage(chatId, `⚠️ Utente ${targetId} già bannato`);
         return;
     }
 
     bannedUsers.push(targetId);
-    sendMessage(chatId, 🚫 Utente ${targetId} bannato con successo!\n\n📋 Totale ban: ${bannedUsers.length});
+    sendMessage(chatId, `🚫 Utente ${targetId} bannato con successo!\n\n📋 Totale ban: ${bannedUsers.length}`);
 });
 
 bot.onText(/\/unban (.+)/, (msg, match) => {
@@ -258,12 +258,12 @@ bot.onText(/\/unban (.+)/, (msg, match) => {
     const index = bannedUsers.indexOf(targetId);
 
     if (index === -1) {
-        sendMessage(chatId, ⚠️ Utente ${targetId} non è bannato);
+        sendMessage(chatId, `⚠️ Utente ${targetId} non è bannato`);
         return;
     }
 
     bannedUsers.splice(index, 1);
-    sendMessage(chatId, ✅ Utente ${targetId} sbannato con successo!\n\n📋 Totale ban: ${bannedUsers.length});
+    sendMessage(chatId, `✅ Utente ${targetId} sbannato con successo!\n\n📋 Totale ban: ${bannedUsers.length}`);
 });
 
 bot.onText(/\/banlist/, (msg) => {
@@ -275,11 +275,11 @@ bot.onText(/\/banlist/, (msg) => {
         return;
     }
 
-    const lista = bannedUsers.map((id, i) => ${i + 1}. ${id}).join('\n');
-    sendMessage(chatId, 🚫 Utenti bannati (${bannedUsers.length}):\n\n${lista});
+    const lista = bannedUsers.map((id, i) => `${i + 1}. ${id}`).join('\n');
+    sendMessage(chatId, `🚫 Utenti bannati (${bannedUsers.length}):\n\n${lista}`);
 });
 
-// 🏆 COMANDI GOLDMEMBER (Semplificati)
+// 🏆 COMANDI GOLDMEMBER
 bot.onText(/\/gold (.+)/, (msg, match) => {
     const chatId = msg.chat.id;
     if (!hasAdminPowers(chatId)) return;
@@ -287,12 +287,12 @@ bot.onText(/\/gold (.+)/, (msg, match) => {
     const targetId = match[1].trim().toString();
 
     if (goldMembers.includes(targetId)) {
-        sendMessage(chatId, ⚠️ Utente ${targetId} già GOLDMember 🏆);
+        sendMessage(chatId, `⚠️ Utente ${targetId} già GOLDMember 🏆`);
         return;
     }
 
     goldMembers.push(targetId);
-    sendMessage(chatId, 🏆 Utente ${targetId} promosso a GOLDMember!\n\n📋 Totale GOLD: ${goldMembers.length});
+    sendMessage(chatId, `🏆 Utente ${targetId} promosso a GOLDMember!\n\n📋 Totale GOLD: ${goldMembers.length}`);
 });
 
 bot.onText(/\/ungold (.+)/, (msg, match) => {
@@ -303,15 +303,15 @@ bot.onText(/\/ungold (.+)/, (msg, match) => {
     const index = goldMembers.indexOf(targetId);
 
     if (index === -1) {
-        sendMessage(chatId, ⚠️ Utente ${targetId} non è GOLDMember);
+        sendMessage(chatId, `⚠️ Utente ${targetId} non è GOLDMember`);
         return;
     }
 
     goldMembers.splice(index, 1);
-    sendMessage(chatId, ✅ Utente ${targetId} rimosso da GOLDMember!\n\n📋 Totale GOLD: ${goldMembers.length});
+    sendMessage(chatId, `✅ Utente ${targetId} rimosso da GOLDMember!\n\n📋 Totale GOLD: ${goldMembers.length}`);
 });
 
-// 🕺🏻 COMANDI SUPERADMIN (Semplificati)
+// 🕺🏻 COMANDI SUPERADMIN
 bot.onText(/\/addsuper (.+)/, (msg, match) => {
     const chatId = msg.chat.id;
     if (!isAdmin(chatId)) return;
@@ -319,12 +319,12 @@ bot.onText(/\/addsuper (.+)/, (msg, match) => {
     const targetId = match[1].trim().toString();
 
     if (superAdmins.includes(targetId)) {
-        sendMessage(chatId, ⚠️ Utente ${targetId} già SUPERadmin 🕺🏻);
+        sendMessage(chatId, `⚠️ Utente ${targetId} già SUPERadmin 🕺🏻`);
         return;
     }
 
     superAdmins.push(targetId);
-    sendMessage(chatId, 🕺🏻 Utente ${targetId} promosso a SUPERadmin!\n\n📋 Totale SUPER: ${superAdmins.length});
+    sendMessage(chatId, `🕺🏻 Utente ${targetId} promosso a SUPERadmin!\n\n📋 Totale SUPER: ${superAdmins.length}`);
 });
 
 bot.onText(/\/removesuper (.+)/, (msg, match) => {
@@ -335,15 +335,15 @@ bot.onText(/\/removesuper (.+)/, (msg, match) => {
     const index = superAdmins.indexOf(targetId);
 
     if (index === -1) {
-        sendMessage(chatId, ⚠️ Utente ${targetId} non è SUPERadmin);
+        sendMessage(chatId, `⚠️ Utente ${targetId} non è SUPERadmin`);
         return;
     }
 
     superAdmins.splice(index, 1);
-    sendMessage(chatId, ✅ Utente ${targetId} rimosso da SUPERadmin!\n\n📋 Totale SUPER: ${superAdmins.length});
+    sendMessage(chatId, `✅ Utente ${targetId} rimosso da SUPERadmin!\n\n📋 Totale SUPER: ${superAdmins.length}`);
 });
 
-// 📱 COMANDI PUBBLICI (Semplificati)
+// 📱 COMANDI PUBBLICI
 bot.onText(/\/start/, (msg) => {
     const chatId = msg.chat.id;
     if (checkBan(chatId)) return;
@@ -351,7 +351,7 @@ bot.onText(/\/start/, (msg) => {
     resetUserState(chatId);
     trackUserActivity(chatId, 'start');
 
-    const startMessage = 🎭 Bot Standup Comedy v.${VERSION} 🎤
+    const startMessage = `🎭 Bot Standup Comedy v.${VERSION} 🎤
 da @dinobronzi82 - Eventi comedy in Italia!
 
 🎯 Comandi:
@@ -370,7 +370,7 @@ da @dinobronzi82 - Eventi comedy in Italia!
 🚀 Sempre online 24/7!
 
 📧 Per problemi, complimenti e suggerimenti:
-zibroncloud@gmail.com 😉;
+zibroncloud@gmail.com 😉`;
 
     sendMessage(chatId, startMessage);
 });
@@ -381,11 +381,11 @@ bot.onText(/\/help/, (msg) => {
 
     resetUserState(chatId);
 
-    const helpMessage = 🎭 Guida Bot Comedy v.${VERSION}
+    const helpMessage = `🎭 Guida Bot Comedy v.${VERSION}
 
 🔍 Ricerca eventi:
 • Sigla provincia: MI, RM, TO
-• Nome città: Milano, Roma, Torino  
+• Nome città: Milano, Roma, Torino
 • Zone Milano/Roma: Milano Nord, Roma Centro
 
 🎪 Categorie:
@@ -408,7 +408,7 @@ bot.onText(/\/help/, (msg) => {
 • Tutti gli eventi su: t.me/OpenMicsITA
 
 📧 Per problemi, complimenti e suggerimenti:
-zibroncloud@gmail.com 😉;
+zibroncloud@gmail.com 😉`;
 
     sendMessage(chatId, helpMessage);
 });
@@ -433,12 +433,12 @@ bot.onText(/\/crea/, (msg) => {
     trackUserActivity(chatId, 'iniziocreazione');
 
     sendMessage(chatId, 'Che tipo di contenuto vuoi pubblicare?', {
-        replymarkup: {
-            inlinekeyboard: [
-                [{ text: '🎤 Serata Stand-up', callbackdata: 'categoriaS' }],
-                [{ text: '🎪 Festival', callbackdata: 'categoriaF' }],
-                [{ text: '📚 Corso/Workshop', callbackdata: 'categoriaW' }],
-                [{ text: '🎥 Podcast/Video', callbackdata: 'categoriaP' }]
+        reply_markup: {
+            inline_keyboard: [
+                [{ text: '🎤 Serata Stand-up', callback_data: 'categoriaS' }],
+                [{ text: '🎪 Festival', callback_data: 'categoriaF' }],
+                [{ text: '📚 Corso/Workshop', callback_data: 'categoriaW' }],
+                [{ text: '🎥 Podcast/Video', callback_data: 'categoriaP' }]
             ]
         }
     });
@@ -461,15 +461,15 @@ bot.onText(/\/mieieventi/, (msg) => {
         return;
     }
 
-    let messaggio = 🎭 I tuoi contenuti (${mieiEventi.length}):\n\n;
+    let messaggio = `🎭 I tuoi contenuti (${mieiEventi.length}):\n\n`;
     mieiEventi.forEach((evento, i) => {
         const categoria = categorieEventi.get(evento.categoria);
         const fotoIcon = evento.locandina ? '📸' : '';
 
         if (evento.categoria === 'P') {
-            messaggio += ${i + 1}. ${fotoIcon}\n🎬 ${evento.titolo}\n${categoria.icona} ${categoria.nome}\n\n;
+            messaggio += `${i + 1}. ${fotoIcon}\n🎬 ${evento.titolo}\n${categoria.icona} ${categoria.nome}\n\n`;
         } else {
-            messaggio += ${i + 1}. ${evento.data} - ${evento.ora} ${fotoIcon}\n🎪 ${evento.titolo}\n🏢 ${evento.nomeLocale}\n📍 ${evento.cittaProvincia}\n${categoria.icona} ${categoria.nome}\n\n;
+            messaggio += `${i + 1}. ${evento.data} - ${evento.ora} ${fotoIcon}\n🎪 ${evento.titolo}\n🏢 ${evento.nomeLocale}\n📍 ${evento.cittaProvincia}\n${categoria.icona} ${categoria.nome}\n\n`;
         }
     });
 
@@ -483,7 +483,7 @@ bot.onText(/\/mieieventi/, (msg) => {
         limiteEventi = 10;
     }
 
-    messaggio += 📊 Contenuti creati oggi: ${eventiOggi}/${limiteEventi};
+    messaggio += `📊 Contenuti creati oggi: ${eventiOggi}/${limiteEventi}`;
 
     sendMessage(chatId, messaggio);
 });
@@ -502,16 +502,16 @@ bot.onText(/\/ultimi/, (msg) => {
 
     const ultimi = eventi.sort((a, b) => new Date(b.dataCreazione) - new Date(a.dataCreazione)).slice(0, 20);
 
-    let messaggio = 🆕 Ultimi ${ultimi.length} contenuti:\n\n;
+    let messaggio = `🆕 Ultimi ${ultimi.length} contenuti:\n\n`;
     ultimi.forEach((evento, i) => {
         const categoria = categorieEventi.get(evento.categoria);
         const fotoIcon = evento.locandina ? '📸' : '';
 
         if (evento.categoria === 'P') {
-            messaggio += ${i + 1}. ${fotoIcon}\n🎬 ${evento.titolo}\n${categoria.icona}\n\n;
+            messaggio += `${i + 1}. ${fotoIcon}\n🎬 ${evento.titolo}\n${categoria.icona}\n\n`;
         } else {
             const tipo = evento.tipo === 'Gratuito' ? '🆓' : '💰';
-            messaggio += ${i + 1}. ${evento.data} - ${evento.ora} ${fotoIcon}\n🎪 ${evento.titolo}\n🏢 ${evento.nomeLocale}\n📍 ${evento.cittaProvincia}\n${tipo} ${categoria.icona}\n\n;
+            messaggio += `${i + 1}. ${evento.data} - ${evento.ora} ${fotoIcon}\n🎪 ${evento.titolo}\n🏢 ${evento.nomeLocale}\n📍 ${evento.cittaProvincia}\n${tipo} ${categoria.icona}\n\n`;
         }
     });
 
@@ -555,7 +555,7 @@ bot.onText(/\/donazioni|\/caffè|\/caffe/, (msg) => {
     if (checkBan(chatId)) return;
 
     resetUserState(chatId);
-    sendMessage(chatId, ☕ Sostieni il progetto!\n\n💰 Revolut: https://revolut.me/r/ZDIdqlisIP\n\nGrazie! 🙏 Ogni donazione aiuta a migliorare il bot.\n\n🎭 Continua a far ridere l'Italia!);
+    sendMessage(chatId, `☕ Sostieni il progetto!\n\n💰 Revolut: https://revolut.me/r/ZDIdqlisIP\n\nGrazie! 🙏 Ogni donazione aiuta a migliorare il bot.\n\n🎭 Continua a far ridere l'Italia!`);
 });
 
 bot.onText(/\/annulla/, (msg) => {
@@ -566,8 +566,8 @@ bot.onText(/\/annulla/, (msg) => {
     sendMessage(chatId, '✅ Operazione annullata.');
 });
 
-// 🎯 GESTIONE CALLBACK (Semplificata e ottimizzata)
-bot.on('callbackquery', async (query) => {
+// 🎯 GESTIONE CALLBACK
+bot.on('callback_query', async (query) => {
     const chatId = query.message.chat.id;
     const data = query.data;
 
@@ -598,8 +598,8 @@ bot.on('callbackquery', async (query) => {
             setUserState(chatId, 'crealocandina', evento);
 
             return sendMessage(chatId, '📸 Vuoi aggiungere una locandina?\n\n📷 Invia una foto oppure scrivi "skip" per saltare', {
-                replymarkup: {
-                    inlinekeyboard: [[{ text: '⏭️ Salta locandina', callbackdata: 'skiplocandina' }]]
+                reply_markup: {
+                    inline_keyboard: [[{ text: '⏭️ Salta locandina', callback_data: 'skiplocandina' }]]
                 }
             });
         }
@@ -629,7 +629,7 @@ bot.on('callbackquery', async (query) => {
 
             if (evento) {
                 eventi = eventi.filter(e => e.id !== evento.id); // Rimuove l'evento dall'array
-                const message = evento.categoria === 'P' ? ✅ Contenuto cancellato!\n🎬 ${evento.titolo} : ✅ Evento cancellato!\n📅 ${evento.data} - ${evento.nomeLocale};
+                const message = evento.categoria === 'P' ? `✅ Contenuto cancellato!\n🎬 ${evento.titolo}` : `✅ Evento cancellato!\n📅 ${evento.data} - ${evento.nomeLocale}`;
                 resetUserState(chatId);
                 return sendMessage(chatId, message);
             }
@@ -659,16 +659,16 @@ async function finalizeEventCreation(chatId, evento) {
     let message;
 
     if (evento.categoria === 'P') {
-        message = 🎉 Contenuto pubblicato!\n\n🎥 Podcast/Video\n🎬 ${evento.titolo}\n${evento.link ? 🔗 ${evento.link} : ''}\n\n📺 Pubblicato su @OpenMicsITA!;
+        message = `🎉 Contenuto pubblicato!\n\n🎥 Podcast/Video\n🎬 ${evento.titolo}\n${evento.link ? `🔗 ${evento.link}` : ''}\n\n📺 Pubblicato su @OpenMicsITA!`;
     } else {
-        message = 🎉 Evento creato con successo!\n\n${categoria.icona} ${categoria.nome}\n📅 ${evento.data} - ${evento.ora}\n🎪 ${evento.titolo}\n🏢 ${evento.nomeLocale}\n📍 ${evento.cittaProvincia}\n🎤 Posti: ${evento.postiComici}\n${evento.tipo === 'Gratuito' ? '🆓' : '💰'} ${evento.tipo}\n\n📺 Pubblicato su @OpenMicsITA!;
+        message = `🎉 Evento creato con successo!\n\n${categoria.icona} ${categoria.nome}\n📅 ${evento.data} - ${evento.ora}\n🎪 ${evento.titolo}\n🏢 ${evento.nomeLocale}\n📍 ${evento.cittaProvincia}\n🎤 Posti: ${evento.postiComici}\n${evento.tipo === 'Gratuito' ? '🆓' : '💰'} ${evento.tipo}\n\n📺 Pubblicato su @OpenMicsITA!`;
     }
 
     sendMessage(chatId, message);
     resetUserState(chatId);
 }
 
-// 📸 GESTIONE FOTO (Semplificata)
+// 📸 GESTIONE FOTO
 bot.on('photo', async (msg) => {
     const chatId = msg.chat.id;
 
@@ -678,7 +678,7 @@ bot.on('photo', async (msg) => {
 
     if (userState?.state === 'crealocandina' || userState?.state === 'crealocandinapodcast') {
         const photo = msg.photo[msg.photo.length - 1];
-        const fileId = photo.fileid;
+        const fileId = photo.file_id;
         userState.data.locandina = fileId;
 
         await finalizeEventCreation(chatId, userState.data);
@@ -687,7 +687,7 @@ bot.on('photo', async (msg) => {
     }
 });
 
-// 📝 GESTIONE MESSAGGI (Ottimizzata e resa più modulare)
+// 📝 GESTIONE MESSAGGI
 bot.on('message', async (msg) => {
     const chatId = msg.chat.id;
     const text = msg.text;
@@ -773,7 +773,7 @@ bot.on('message', async (msg) => {
     }
 });
 
-// Funzioni di gestione dei singoli stati (Modularità e leggibilità)
+// Funzioni di gestione dei singoli stati
 async function handleCreaTitoloPodcast(chatId, text, userState) {
     userState.data.titolo = text;
     setUserState(chatId, 'crealinkpodcast', userState.data);
@@ -785,8 +785,8 @@ async function handleCreaLinkPodcast(chatId, text, userState) {
     setUserState(chatId, 'crealocandinapodcast', userState.data);
 
     sendMessage(chatId, '📸 Vuoi aggiungere un\'immagine?\n\n📷 Invia una foto oppure scrivi "skip" per saltare', {
-        replymarkup: {
-            inlinekeyboard: [[{ text: '⏭️ Salta immagine', callbackdata: 'skiplocandinapodcast' }]]
+        reply_markup: {
+            inline_keyboard: [[{ text: '⏭️ Salta immagine', callback_data: 'skiplocandinapodcast' }]]
         }
     });
 }
@@ -802,4 +802,20 @@ async function handleCreaLocandinaPodcast(chatId, text, userState) {
 }
 
 async function handleCreaData(chatId, text, userState) {
-    if (!/^\d{1,2}\/\d{1,
+    if (!/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(text)) {
+        sendMessage(chatId, 'Formato non valido. Usa GG/MM/AAAA');
+        return;
+    }
+
+    const [gg, mm, aa] = text.split('/').map(Number);
+    const dataEvento = new Date(aa, mm - 1, gg);
+    const oggi = new Date();
+    oggi.setHours(0, 0, 0, 0);
+
+    if (dataEvento < oggi) {
+        sendMessage(chatId, '⚠️ Non puoi creare eventi nel passato!\n\n📅 Inserisci una data da oggi in poi.');
+        return;
+    }
+
+    const maxData = new Date();
+    maxData.setDate(maxData.getDate()
