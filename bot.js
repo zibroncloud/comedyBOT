@@ -46,7 +46,7 @@ async function sendMessage(chatId, text, options = {}) {
     try {
         await bot.sendMessage(chatId, text, options);
     } catch (error) {
-        console.error(❌ Errore invio messaggio a ${chatId}: ${error.message});
+        console.error(Errore invio messaggio a ${chatId}: ${error.message});
     }
 }
 
@@ -55,7 +55,7 @@ async function postToChannel(evento) {
     try {
         const categoria = categorieEventi.get(evento.categoria);
         if (!categoria) {
-            console.error(❌ Categoria non valida: ${evento.categoria});
+            console.error(Categoria non valida: ${evento.categoria});
             return false;
         }
 
