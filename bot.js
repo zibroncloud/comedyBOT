@@ -1,6 +1,4 @@
-Certamente, capisco la frustrazione. Ecco il codice completo corretto, con tutti gli errori di sintassi risolti e alcune piccole ottimizzazioni per renderlo più leggibile. Ho mantenuto la logica originale del tuo codice, concentrandomi sulla correzione degli errori che causavano il crash.
-
-```javascript
+javascript
 const TelegramBot = require('node-telegram-bot-api');
 
 // Configurazione
