@@ -1,10 +1,10 @@
-# 🎭 Comedy Bot Telegram v.26.4
+# 🎭 Comedy Bot Telegram v.23.01
 
 Bot Telegram per la gestione e ricerca di eventi di Stand-up Comedy in Italia.
 
 ## 🎯 Funzionalità
 
-- **🎪 Creazione eventi** con categorie (Serata, Festival, Workshop)
+- **🎪 Creazione eventi** con categorie (Serata, Festival, Workshop Podcast/video)
 - **🔍 Ricerca eventi** per provincia/città
 - **📅 Gestione completa** (modifica, cancellazione)
 - **🎤 Informazioni dettagliate** (titolo, locale, indirizzo, organizzatore)
